@@ -335,6 +335,8 @@ if(BuildSPEngine OR BuildJK2SPEngine)
 
 	set(SPEngineSysFiles
 		"${SharedDir}/sys/sys_main.cpp"
+		"${SharedDir}/sys/sys_campaign_select.cpp"
+		"${SharedDir}/sys/sys_campaign_select.h"
 		"${SharedDir}/sys/sys_event.cpp"
 		"${SharedDir}/sys/sys_local.h"
 		"${SharedDir}/sys/sys_public.h"

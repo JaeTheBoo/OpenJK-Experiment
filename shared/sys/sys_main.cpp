@@ -32,6 +32,10 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "sys_public.h"
 #include "con_local.h"
 
+#if defined(_JK2EXE) && !defined(JK2_MODE)
+#include "sys_campaign_select.h"
+#endif
+
 static char binaryPath[ MAX_OSPATH ] = { 0 };
 static char installPath[ MAX_OSPATH ] = { 0 };
 
@@ -762,9 +766,26 @@ int main ( int argc, char* argv[] )
 	Sys_SetBinaryPath( Sys_Dirname( argv[ 0 ] ) );
 	Sys_SetDefaultInstallPath( DEFAULT_BASEDIR );
 
+#if defined(_JK2EXE) && !defined(JK2_MODE)
+	// Jedi Academy single player only: ask whether to play Jedi Academy or Jedi Outcast.
+	// Jedi Outcast runs in its own engine, so this program exits once it has been started.
+	char campaignCommandLine[ MAX_STRING_CHARS ] = { 0 };
+	if ( !Sys_CampaignSelect_Run( Sys_BinaryPath(), argc, argv, campaignCommandLine, sizeof( campaignCommandLine ) ) )
+	{
+		return 0;
+	}
+	Q_strcat( commandLine, sizeof( commandLine ), campaignCommandLine );
+#endif
+
 	// Concatenate the command line for passing to Com_Init
 	for( i = 1; i < argc; i++ )
 	{
+#if defined(_JK2EXE) && !defined(JK2_MODE)
+		if ( Sys_CampaignSelect_IsLauncherArgument( argv[i] ) )
+		{
+			continue;	// --campaign=... is for the chooser above, not for the engine
+		}
+#endif
 		const bool containsSpaces = (strchr(argv[i], ' ') != NULL);
 		if (containsSpaces)
 			Q_strcat( commandLine, sizeof( commandLine ), "\"" );

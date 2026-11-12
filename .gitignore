@@ -147,6 +147,8 @@ Desktop.ini
 dist
 build
 build64
+# Local install of the built game (cmake --install build --prefix install)
+install/
 eggs
 parts
 bin
