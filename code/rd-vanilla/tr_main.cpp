@@ -350,7 +350,9 @@ void R_RotateForEntity( const trRefEntity_t *ent, const viewParms_t *viewParms,
 	vec3_t	delta;
 	float	axisLength;
 
-	if ( ent->e.reType != RT_MODEL ) {
+	// Models and run-time meshes are placed by their origin and axis; everything else is built in
+	// world space already.
+	if ( ent->e.reType != RT_MODEL && ent->e.reType != RT_DYNAMIC_MESH ) {
 		*ori = viewParms->world;
 		return;
 	}
@@ -1258,6 +1260,52 @@ void R_SortDrawSurfs( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 R_AddEntitySurfaces
 =============
 */
+/*
+=============
+R_AddDynamicMeshSurfaces
+
+Queues every batch of an RT_DYNAMIC_MESH entity's triangles for drawing. The entity is lit like a
+model (from its lighting origin), and its triangles are given in its own space, so the usual model
+transform places them. The surfaces are kept in a pool that is emptied every frame.
+=============
+*/
+static const int MAX_DYNAMIC_MESH_SURFACES = 1024;
+static srfDynamicMesh_t dynamicMeshSurfaces[MAX_DYNAMIC_MESH_SURFACES];
+int r_numDynamicMeshSurfaces;
+
+void R_AddDynamicMeshSurfaces( trRefEntity_t *ent ) {
+	const dynamicMesh_t *mesh = ent->e.dynamicMesh;
+	if ( !mesh || mesh->numBatches <= 0 ) {
+		return;
+	}
+	if ( (ent->e.renderfx & RF_THIRD_PERSON) && !tr.viewParms.isPortal ) {
+		return;
+	}
+
+	R_RotateForEntity( ent, &tr.viewParms, &tr.ori );
+	R_SetupEntityLighting( &tr.refdef, ent );
+	const int fogNum = R_SpriteFogNum( ent );
+
+	for ( int batch = 0; batch < mesh->numBatches; batch++ ) {
+		if ( r_numDynamicMeshSurfaces >= MAX_DYNAMIC_MESH_SURFACES ) {
+			ri.Printf( PRINT_DEVELOPER, "R_AddDynamicMeshSurfaces: too many surfaces this frame\n" );
+			return;
+		}
+		srfDynamicMesh_t *surface = &dynamicMeshSurfaces[r_numDynamicMeshSurfaces++];
+		surface->surfaceType = SF_DYNAMIC_MESH;
+		surface->mesh = mesh;
+		surface->batch = batch;
+
+		// Shaders registered by name through the cgame are set up for 2D drawing (unlit). A mesh
+		// wants the version a model would use, lit by the world, as a skin would register it.
+		shader_t *shader = R_GetShaderByHandle( mesh->batches[batch].shader );
+		if ( shader->lightmapIndex[0] == LIGHTMAP_2D ) {
+			shader = R_FindShader( shader->name, lightmapsNone, stylesDefault, qtrue );
+		}
+		R_AddDrawSurf( (surfaceType_t *)surface, shader, fogNum, qfalse );
+	}
+}
+
 void R_AddEntitySurfaces (void) {
 	trRefEntity_t	*ent;
 	shader_t		*shader;
@@ -1298,6 +1346,9 @@ void R_AddEntitySurfaces (void) {
 		switch ( ent->e.reType ) {
 		case RT_PORTALSURFACE:
 			break;		// don't draw anything
+		case RT_DYNAMIC_MESH:
+			R_AddDynamicMeshSurfaces( ent );
+			break;
 		case RT_SPRITE:
 		case RT_ORIENTED_QUAD:
 		case RT_BEAM:

@@ -577,10 +577,19 @@ Ghoul2 Insert End
 	SF_FLARE,
 	SF_ENTITY,				// beams, rails, lightning, etc that can be determined by entity
 	SF_DISPLAY_LIST,
+	SF_DYNAMIC_MESH,		// one batch of an RT_DYNAMIC_MESH entity's triangles
 
 	SF_NUM_SURFACE_TYPES,
 	SF_MAX = 0xffffffff			// ensures that sizeof( surfaceType_t ) == sizeof( int )
 } surfaceType_t;
+
+// One batch of an RT_DYNAMIC_MESH entity's triangles, queued for drawing this frame (see
+// R_AddDynamicMeshSurfaces). The mesh itself belongs to the game and lives until the frame is drawn.
+typedef struct srfDynamicMesh_s {
+	surfaceType_t			surfaceType;	// SF_DYNAMIC_MESH
+	const dynamicMesh_t		*mesh;
+	int						batch;			// which of the mesh's batches
+} srfDynamicMesh_t;
 
 typedef struct drawSurf_s {
 	unsigned			sort;			// bit combination for fast compares
@@ -1240,6 +1249,10 @@ void R_DecomposeSort( unsigned sort, int *entityNum, shader_t **shader,
 					 int *fogNum, int *dlightMap );
 
 void R_AddDrawSurf( const surfaceType_t *surface, const shader_t *shader, int fogIndex, int dlightMap );
+
+// RT_DYNAMIC_MESH entities (see dynamicMesh_t in tr_types.h).
+void R_AddDynamicMeshSurfaces( trRefEntity_t *ent );
+extern int r_numDynamicMeshSurfaces;	// surfaces queued this frame, reset by R_InitNextFrame
 
 
 #define	CULL_IN		0		// completely unclipped

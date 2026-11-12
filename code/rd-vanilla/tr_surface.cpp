@@ -2098,6 +2098,38 @@ void RB_SurfaceDisplayList( srfDisplayList_t *surf ) {
 void RB_SurfaceSkip( void *surf ) {
 }
 
+/*
+==================
+RB_SurfaceDynamicMesh
+
+Draws one batch of an RT_DYNAMIC_MESH entity's triangles. Each triangle is copied with its own
+three vertices, so a batch of any size fits: whenever the tesselator fills up it is drawn and
+started again (RB_CHECKOVERFLOW), which needs every addition to be small.
+==================
+*/
+static void RB_SurfaceDynamicMesh( srfDynamicMesh_t *surface ) {
+	const dynamicMesh_t *mesh = surface->mesh;
+	const dynamicMeshBatch_t *batch = &mesh->batches[surface->batch];
+
+	for ( int triangle = 0; triangle + 2 < batch->numIndexes; triangle += 3 ) {
+		RB_CHECKOVERFLOW( 3, 3 );
+		for ( int corner = 0; corner < 3; corner++ ) {
+			const int vertex = mesh->indexes[batch->firstIndex + triangle + corner];
+			const int slot = tess.numVertexes;
+			VectorCopy( mesh->xyz[vertex], tess.xyz[slot] );
+			VectorCopy( mesh->normal[vertex], tess.normal[slot] );
+			tess.texCoords[slot][0][0] = mesh->st[vertex][0];
+			tess.texCoords[slot][0][1] = mesh->st[vertex][1];
+			tess.vertexColors[slot][0] = 255;
+			tess.vertexColors[slot][1] = 255;
+			tess.vertexColors[slot][2] = 255;
+			tess.vertexColors[slot][3] = 255;
+			tess.indexes[tess.numIndexes++] = slot;
+			tess.numVertexes++;
+		}
+	}
+}
+
 void (*rb_surfaceTable[SF_NUM_SURFACE_TYPES])( void *) = {
 	(void(*)(void*))RB_SurfaceBad,			// SF_BAD,
 	(void(*)(void*))RB_SurfaceSkip,			// SF_SKIP,
@@ -2117,5 +2149,6 @@ Ghoul2 Insert End
 
 	(void(*)(void*))RB_SurfaceFlare,		// SF_FLARE,
 	(void(*)(void*))RB_SurfaceEntity,		// SF_ENTITY
-	(void(*)(void*))RB_SurfaceDisplayList	// SF_DISPLAY_LIST
+	(void(*)(void*))RB_SurfaceDisplayList,	// SF_DISPLAY_LIST
+	(void(*)(void*))RB_SurfaceDynamicMesh	// SF_DYNAMIC_MESH
 };

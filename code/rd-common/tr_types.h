@@ -119,9 +119,32 @@ typedef enum
 	RT_SABER_GLOW,
 	RT_PORTALSURFACE,		// doesn't draw anything, just info for portals
 	RT_CLOUDS,
+	RT_DYNAMIC_MESH,		// triangles made at run time (see dynamicMesh_t), lit like a model
 
 	RT_MAX_REF_ENTITY_TYPE
 } refEntityType_t;
+
+// One group of a dynamic mesh's triangles that are drawn with the same shader.
+typedef struct dynamicMeshBatch_s {
+	qhandle_t	shader;
+	int			firstIndex;			// first entry in dynamicMesh_t::indexes
+	int			numIndexes;			// three per triangle
+} dynamicMeshBatch_t;
+
+// A triangle mesh built at run time (for example one half of a body cut in two by a lightsaber),
+// drawn by an RT_DYNAMIC_MESH entity. Positions and normals are in the entity's own space (its
+// origin and axis), so moving the piece only needs a new origin and axis. The arrays belong to
+// the caller and must stay valid until the frame has been rendered.
+typedef struct dynamicMesh_s {
+	int							numVertexes;
+	const float					(*xyz)[3];
+	const float					(*normal)[3];
+	const float					(*st)[2];
+	int							numIndexes;
+	const int					*indexes;
+	int							numBatches;
+	const dynamicMeshBatch_t	*batches;
+} dynamicMesh_t;
 
 typedef struct {
 	refEntityType_t	reType;
@@ -175,6 +198,8 @@ Ghoul2 Insert Start
 /*
 Ghoul2 Insert End
 */
+
+	const dynamicMesh_t	*dynamicMesh;	// RT_DYNAMIC_MESH only: the triangles to draw
 
 } refEntity_t;
 
