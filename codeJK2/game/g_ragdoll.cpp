@@ -57,6 +57,8 @@ cvar_t *g_ragdollDebug;				// 1 = print each ragdoll's behaviour changes to the 
 cvar_t *g_ragdollKnockdowns;		// 1 = characters knocked down by Force Push or Pull fall as ragdolls and get back up
 cvar_t *g_ragdollHitReactions;		// 1 = living characters are physically jolted by hits while they keep fighting
 cvar_t *g_ragdollHitReactionScale;	// how hard hits jolt living characters, compared with how hard they push corpses
+cvar_t *g_ragdollShotReactions;		// 1 = a hit takes control of an NPC (GTA / Red Dead style): its AI pauses while its
+									// body reacts, staggers and recovers; 0 = NPCs only flinch while their AI carries on
 
 /*
 ==================
@@ -115,6 +117,93 @@ static const float HIT_REACTION_LEG_FREQUENCY = 30.0f;
 static const float HIT_REACTION_PELVIS_FREQUENCY = 25.0f;		// how firmly the pelvis follows the animated pelvis
 static const float HIT_REACTION_PELVIS_DAMPING = 10.0f;
 static const float HIT_REACTION_LONGEST_SPIN = 15.0f;			// radians per second, keeps a big hit from spinning a limb wildly
+
+// Footing and balance while reacting to hits and stumbling (see DriveTowardAnimation).
+static const float FOOT_PLANT_FREQUENCY = 30.0f;		// how firmly each foot is held where the animation plants it
+static const float FOOT_PLANT_WEIGHT_SHARE = 0.5f;		// each foot's hold is sized for this share of the body's weight
+static const float STUMBLE_PELVIS_FREQUENCY = 16.0f;	// the softer hold on the hips while stumbling
+
+// Balance stepping while stumbling, after Euphoria's balancer: the feet step toward the point the
+// body is falling toward (the capture point). Distances are for a model of normal size.
+static const float STEP_TRIGGER_DISTANCE = 8.0f;		// capture point this far from between the feet: take a step
+static const float STEP_SECONDS = 0.26f;				// how long one step takes
+static const float STEP_LIFT = 5.0f;					// how high the stepping foot is lifted halfway through
+static const float STEP_LONGEST = 34.0f;				// the longest step, measured from the standing foot
+static const float MISSTEP_EXTRA_DISTANCE = 14.0f;		// needing a step this much longer than the longest: a misstep
+static const float STEP_REACH_SHARE = 0.9f;			// steps land this share of the way to the capture point, so a
+														// moving body carries on past the foot and needs another step:
+														// the character travels instead of stamping on the spot
+static const float STANDING_LEG_REACH = 20.0f;			// a planted foot further than this (horizontally) from the hips is
+														// dragged after them, skidding, instead of holding the body back
+static const float STAGGER_LEG_FREQUENCY = 4.0f;		// leg muscles while staggering: loose, so the legs swing under the
+														// travelling hips instead of braking them
+static const float STANCE_HALF_WIDTH = 5.0f;			// steps land this far to the side of the fall line, keeping the feet apart
+static const float ALTERNATE_STEP_SHARE = 0.6f;			// the feet take turns; the same foot steps twice only if the other
+														// is already less than this share as far from where the body is going
+static const float STEPPING_LEG_FREQUENCY = 12.0f;		// leg muscles give while stepping, so the legs reach the placed feet
+static const float CENTRE_OF_MASS_VELOCITY_SMOOTHING = 0.3f;	// share of each new measurement, steadies the capture point
+
+// Feet are always put down on real ground. Distances are for a model of normal size.
+static const float FOOT_HEIGHT = 2.2f;					// a standing foot's centre above the ground
+static const float STEP_UP_LIMIT = 16.0f;				// ground this much higher where a foot would land: the character trips
+static const float STEP_DOWN_LIMIT = 20.0f;				// ground this much lower (or none): the character steps into a drop
+
+// Shot reactions that take control of an NPC, in the style of GTA IV/V and Red Dead Redemption
+// (see ControlBodyAfterHit).
+static const float SHOT_REACTION_IMPULSE_SCALE = 0.35f;		// how hard hits jolt a body that is reacting on its own
+static const float SHOT_REACTION_SHORTEST_SECONDS = 0.9f;	// control is kept at least this long after the last hit
+static const float RECOVERED_SPEED = 20.0f;				// the body must be moving slower than this (units per second) to recover
+static const float LONGEST_CONTROL_SECONDS = 4.0f;		// after this long the character gets its body back regardless
+static const int CONTROL_WITHOUT_DRAWING_MILLISECONDS = 500;	// a character out of sight this long gets its body back
+static const float STAGGER_BRAKING = 1.2f;				// per second: how quickly the legs slow a staggering body
+static const float SETTLE_BRAKING = 3.0f;				// per second: once the stagger is over, the legs plant and stop it
+static const float STAGGER_BODY_TILT_DEGREES = 6.0f;	// a staggering body tips the way it is going (the hips lead)
+static const float STAGGER_HUNCH_SHARE = 0.4f;			// how much of the stagger's lean becomes a hunch toward the shooter
+static const float STAGGER_WANDER_ACCELERATION = 70.0f;	// units per second squared: the legs fighting the body push it about
+static const float STAGGER_WANDER_SHORTEST_SECONDS = 0.3f;	// how often that push changes direction
+static const float STAGGER_WANDER_LONGEST_SECONDS = 0.6f;
+static const float HIP_SUPPORT_FREQUENCY = 18.0f;		// how firmly the legs hold the hips up at standing height
+static const float HIP_SUPPORT_HORIZONTAL_SHARE = 0.08f;	// how gently they pull the hips back over the feet
+static const float UPRIGHT_PELVIS_FREQUENCY = 25.0f;		// how firmly the hips are kept upright
+// Tense muscles: the body takes a hit with a sharp jolt and comes straight back. These have to be
+// high because each spine muscle's strength is sized for one segment, but it holds up everything
+// above it (the chest, the arms and the head).
+static const float CONTROL_SPINE_FREQUENCY = 80.0f;
+static const float CONTROL_NECK_FREQUENCY = 50.0f;
+static const float CONTROL_ARM_FREQUENCY = 16.0f;
+
+// Flinching toward the wound (see ApplyFlinch), as Euphoria's shot behaviour does: the spine curls
+// toward where the hit landed (doubling over a hit in the stomach, arching away from a hit in the
+// back), the head dips, the wounded side turns away from the shot and the knees give a little.
+static const float FLINCH_RISE_SECONDS = 0.08f;			// how quickly the flinch comes on
+static const float FLINCH_HOLD_SECONDS = 0.45f;			// how long after the hit it starts to let go
+static const float FLINCH_RELAX_SECONDS = 0.5f;			// how slowly it lets go
+static const float FLINCH_FULL_DAMAGE = 16.0f;			// hits this hard flinch fully; weaker ones down to half
+static const float TORSO_FLINCH_DEGREES = 28.0f;		// curl toward a wound in the body
+static const float LIMB_FLINCH_DEGREES = 14.0f;			// curl toward a wound in an arm, the neck, the head or a leg
+static const float ARM_ACROSS_BODY_DISTANCE = 16.0f;	// an arm hit this close to the torso's centre line (an arm held
+														// across the chest, holding a rifle) flinches like a body hit
+static const float WOUND_TWIST_DEGREES = 12.0f;			// the wounded side turns away from the shot
+static const float WOUND_TWIST_FULL_OFFSET = 6.0f;		// a wound this far off the body's centre line twists fully
+static const float HIP_DROP_ON_HIT = 3.0f;				// the knees give this much on any hit (units)
+static const float HIP_DROP_ON_LEG_HIT = 9.0f;			// and this much when a leg is hit
+
+// A free hand clutches the wound after a hit (see ReachForWound).
+static const float CLUTCH_SECONDS = 1.6f;				// how long the hand stays on the wound
+static const float CLUTCH_REACH_SECONDS = 0.15f;			// how quickly it gets there
+static const float CLUTCH_RELEASE_SECONDS = 0.3f;		// how gently it lets go
+static const float CLUTCH_HAND_OFFSET = 2.5f;			// the hand rests this far out from the wound, on the surface
+static const float CLUTCH_ARM_FREQUENCY = 30.0f;
+
+// Arms windmill to regain balance while stumbling: raised out to the sides and circling.
+static const float WINDMILL_FULL_AT_LEAN_DEGREES = 15.0f;	// leaning this far with the stumble windmills at full strength
+static const float WINDMILL_RAISE_DEGREES = 50.0f;		// arms raised this far from hanging straight down (more lifts the weapon overhead)
+static const float WINDMILL_CIRCLE_DEGREES = 25.0f;		// the size of the circles
+static const float WINDMILL_CIRCLES_PER_SECOND = 2.2f;
+// Arm muscles while windmilling. This has to be high: a muscle's strength is sized for the upper arm
+// alone turning about its own centre, but the arm pivots at the shoulder and carries the forearm and
+// hand, so weaker arms sag under their own weight and trail the circles.
+static const float WINDMILL_ARM_FREQUENCY = 80.0f;
 
 // While ragdolled, the knockdown animation's timer is topped up to this every frame. The AI and
 // movement code treat the character as knocked down until it runs out, and keeping it short means a
@@ -194,6 +283,46 @@ struct RagdollInstance
 	Transform animationBodyTargets[HUMANOID_BODY_COUNT];	// where the animation has each body (world space)
 	bool hasPreviousPelvisTarget;
 	Transform previousPelvisTarget;					// used to carry the body along with the character's movement
+
+	// Balance stepping while stumbling (see StepToKeepBalance). Feet are numbered 0 = right, 1 = left.
+	bool isStepping;
+	Vector3 plantedFootPositions[2];				// where each foot stands (its body's centre)
+	Quaternion footRotationFromPelvis[2];			// each foot's orientation relative to the pelvis when stepping began
+	int swingingFoot;								// the foot taking a step, or -1
+	int lastSteppedFoot;							// the foot that stepped last, or -1 (the feet take turns)
+	float swingSeconds;								// how far into the step
+	Vector3 swingStartPosition;
+	Vector3 swingTargetPosition;
+	bool hasPreviousCentreOfMass;
+	Vector3 previousCentreOfMass;
+	Vector3 centreOfMassVelocity;					// smoothed, units per second
+
+	// Shot reactions that take control of an NPC (see ControlBodyAfterHit): the AI is paused and the
+	// body reacts on its own instead of following the animation, until it has its balance back.
+	bool isInControl;
+	float secondsInControl;
+	int lastDrawnLevelTime;							// control is given back if the character is not drawn for a while
+	bool hasReactionPose;
+	Quaternion reactionPoseFromPelvis[HUMANOID_BODY_COUNT];	// each body's orientation relative to the hips when the shot landed
+	Quaternion reactionPelvisRotation;				// the hips' orientation then (their upright tilt)
+	float standingPelvisHeight;						// how high above the feet the hips are held, or -1 until measured
+	Vector3 characterOffsetFromPelvis;				// from the hips to the character's origin (horizontal): the character follows the body
+	Vector3 controlStartPosition;					// where the hips were when control began (to report how far a stagger went)
+	float wanderSecondsLeft;						// until the sideways push of a struggling stagger changes direction
+	Vector3 wanderAcceleration;						// that push (units per second squared)
+
+	// Clutching the wound (see ReachForWound).
+	int clutchingHand;								// 0 = right, 1 = left, -1 = none
+	int woundBody;
+	Vector3 woundInBodySpace;						// where on that body the hit landed
+	float clutchSecondsLeft;
+
+	// Flinching toward the wound (see ApplyFlinch).
+	Vector3 flinchDirection;						// horizontal, from the body toward the wound (toward the shooter for a hit from the front)
+	float flinchRadians;							// how far the spine curls toward it at the peak
+	float flinchTwistRadians;						// how far the wounded side turns away from the shot (signed, about the vertical)
+	float flinchHipDrop;							// how far the knees give at the peak (units, normal-size model)
+	float secondsSinceFlinch;
 
 	// Knockdowns: a living character knocked over by the Force, who gets back up afterwards.
 	bool isKnockdown;
@@ -335,6 +464,24 @@ static Vector3 HorizontalPart( const Vector3 &vector )
 	return Vector3( vector.x, vector.y, 0.0f );
 }
 
+// The hips and legs: the part of the body that keeps a living character standing.
+static bool IsLowerBody( int bodyIndex )
+{
+	switch ( bodyIndex )
+	{
+	case ragdoll::BODY_PELVIS:
+	case ragdoll::BODY_RIGHT_THIGH:
+	case ragdoll::BODY_RIGHT_SHIN:
+	case ragdoll::BODY_RIGHT_FOOT:
+	case ragdoll::BODY_LEFT_THIGH:
+	case ragdoll::BODY_LEFT_SHIN:
+	case ragdoll::BODY_LEFT_FOOT:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static void SetState( RagdollInstance &instance, ragdollState_t newState )
 {
 	instance.state = newState;
@@ -376,6 +523,7 @@ void G_Ragdoll_RegisterCvars( void )
 	g_ragdollKnockdowns		= gi.cvar( "g_ragdollKnockdowns", "1", CVAR_ARCHIVE );
 	g_ragdollHitReactions	= gi.cvar( "g_ragdollHitReactions", "1", CVAR_ARCHIVE );
 	g_ragdollHitReactionScale = gi.cvar( "g_ragdollHitReactionScale", "0.4", CVAR_ARCHIVE );
+	g_ragdollShotReactions	= gi.cvar( "g_ragdollShotReactions", "1", CVAR_ARCHIVE );
 	ragdoll::RegisterBalanceCvars();	// g_ragdollStumbles, g_ragdollBalance
 }
 
@@ -588,6 +736,141 @@ static int NearestBody( const Simulation &simulation, const Vector3 &point, floa
 	return nearestBody;
 }
 
+// Remembers where a living character was hit, so a free hand can clutch the wound (see
+// ReachForWound). The left hand clutches, since the right one holds the weapon, unless the wound is
+// on the left arm itself. Leg wounds are not clutched: a standing character cannot reach them.
+static void NoteWound( RagdollInstance &instance, int hitBody, const Vector3 &hitPoint )
+{
+	int hand;
+	switch ( hitBody )
+	{
+	case ragdoll::BODY_RIGHT_THIGH:
+	case ragdoll::BODY_RIGHT_SHIN:
+	case ragdoll::BODY_RIGHT_FOOT:
+	case ragdoll::BODY_LEFT_THIGH:
+	case ragdoll::BODY_LEFT_SHIN:
+	case ragdoll::BODY_LEFT_FOOT:
+		return;
+	case ragdoll::BODY_LEFT_UPPER_ARM:
+	case ragdoll::BODY_LEFT_FOREARM:
+	case ragdoll::BODY_LEFT_HAND:
+		hand = 0;
+		break;
+	default:
+		hand = 1;
+		break;
+	}
+	const RigidBody &body = instance.simulation.bodies[hitBody];
+	instance.clutchingHand = hand;
+	instance.woundBody = hitBody;
+	instance.woundInBodySpace = ragdoll::InverseRotate( body.orientation, hitPoint - body.position );
+	instance.clutchSecondsLeft = CLUTCH_SECONDS;
+}
+
+// How far a point is from the line through the middle of the torso (from the hips to the chest).
+static float DistanceFromTorsoLine( const Simulation &simulation, const Vector3 &point )
+{
+	const Vector3 &hips = simulation.bodies[ragdoll::BODY_PELVIS].position;
+	const Vector3 torso = simulation.bodies[ragdoll::BODY_CHEST].position - hips;
+	const float torsoLengthSquared = ragdoll::LengthSquared( torso );
+	const float along = ( torsoLengthSquared > ragdoll::SMALL_NUMBER )
+		? ragdoll::Clamp( ragdoll::Dot( point - hips, torso ) / torsoLengthSquared, 0.0f, 1.0f )
+		: 0.0f;
+	return ragdoll::Length( point - ( hips + torso * along ) );
+}
+
+// How strongly the flinch toward the wound shows right now (0 to 1): it comes on fast, holds, and
+// lets go slowly.
+static float FlinchAmount( const RagdollInstance &instance )
+{
+	const float seconds = instance.secondsSinceFlinch;
+	const float rise = ragdoll::Clamp( seconds / FLINCH_RISE_SECONDS, 0.0f, 1.0f );
+	const float hold = 1.0f - ragdoll::Clamp( ( seconds - FLINCH_HOLD_SECONDS ) / FLINCH_RELAX_SECONDS, 0.0f, 1.0f );
+	return rise * rise * ( 3.0f - 2.0f * rise ) * hold * hold * ( 3.0f - 2.0f * hold );
+}
+
+// Starts the flinch toward a new wound (see ApplyFlinch). How far the body curls depends on where and
+// how hard the hit landed; a hit in the body curls it most, and a hit in a leg makes the knees give.
+// A weaker hit does not cut short a stronger flinch that is still near its peak.
+static void StartFlinch( RagdollInstance &instance, int hitBody, const Vector3 &hitPoint, const Vector3 &hitDirection, int damage )
+{
+	const Simulation &simulation = instance.simulation;
+	const RigidBody &chest = simulation.bodies[ragdoll::BODY_CHEST];
+
+	float curlDegrees = LIMB_FLINCH_DEGREES;
+	float twistDegrees = WOUND_TWIST_DEGREES;
+	float hipDrop = HIP_DROP_ON_HIT;
+	bool armAcrossBody = false;
+	switch ( hitBody )
+	{
+	case ragdoll::BODY_PELVIS:
+	case ragdoll::BODY_LOWER_SPINE:
+	case ragdoll::BODY_MIDDLE_SPINE:
+	case ragdoll::BODY_CHEST:
+		curlDegrees = TORSO_FLINCH_DEGREES;
+		break;
+	case ragdoll::BODY_RIGHT_UPPER_ARM:
+	case ragdoll::BODY_RIGHT_FOREARM:
+	case ragdoll::BODY_RIGHT_HAND:
+	case ragdoll::BODY_LEFT_UPPER_ARM:
+	case ragdoll::BODY_LEFT_FOREARM:
+	case ragdoll::BODY_LEFT_HAND:
+		// An arm held across the chest (holding a rifle) takes the hits aimed at the body, so the body
+		// flinches as if it had been hit itself.
+		armAcrossBody = DistanceFromTorsoLine( simulation, hitPoint ) < ARM_ACROSS_BODY_DISTANCE * instance.rig.modelScale;
+		if ( armAcrossBody )
+		{
+			curlDegrees = TORSO_FLINCH_DEGREES;
+		}
+		break;
+	case ragdoll::BODY_RIGHT_THIGH:
+	case ragdoll::BODY_RIGHT_SHIN:
+	case ragdoll::BODY_RIGHT_FOOT:
+	case ragdoll::BODY_LEFT_THIGH:
+	case ragdoll::BODY_LEFT_SHIN:
+	case ragdoll::BODY_LEFT_FOOT:
+		twistDegrees = 0.0f;
+		hipDrop = HIP_DROP_ON_LEG_HIT;
+		break;
+	default:
+		break;
+	}
+	const float strength = ragdoll::Clamp( damage / FLINCH_FULL_DAMAGE, 0.5f, 1.0f );
+	const float curlRadians = ragdoll::DegreesToRadians( curlDegrees ) * strength;
+	if ( FlinchAmount( instance ) * instance.flinchRadians > curlRadians )
+	{
+		return;
+	}
+
+	// Toward the wound is back along the shot. A shot from straight above or below curls the body forward.
+	Vector3 towardWound = ragdoll::Normalized( HorizontalPart( hitDirection * -1.0f ) );
+	if ( ragdoll::LengthSquared( towardWound ) < ragdoll::SMALL_NUMBER )
+	{
+		towardWound = ragdoll::Normalized( HorizontalPart(
+			ragdoll::Rotate( chest.orientation, instance.rig.forwardAxisInBodySpace[ragdoll::BODY_CHEST] ) ) );
+	}
+
+	// The wounded side turns away from the shot: the twist moves the wound along the shot's direction,
+	// fully for a wound well off the body's centre line and not at all for one right on it.
+	const Vector3 awayFromShot = towardWound * -1.0f;
+	const Vector3 woundOffset = HorizontalPart( hitPoint - chest.position );
+	const float offCentre = ragdoll::Length( ragdoll::RemoveComponent( woundOffset, awayFromShot ) );
+	const float twistShare = ragdoll::Clamp( offCentre / ( WOUND_TWIST_FULL_OFFSET * instance.rig.modelScale ), 0.0f, 1.0f );
+	const float twistSign = ( ragdoll::Cross( woundOffset, awayFromShot ).z >= 0.0f ) ? 1.0f : -1.0f;
+
+	instance.flinchDirection = towardWound;
+	instance.flinchRadians = curlRadians;
+	instance.flinchTwistRadians = ragdoll::DegreesToRadians( twistDegrees ) * strength * twistShare * twistSign;
+	instance.flinchHipDrop = hipDrop * strength;
+	instance.secondsSinceFlinch = 0.0f;
+
+	if ( g_ragdollDebug->integer )
+	{
+		gi.Printf( "ragdoll %d: flinches %.0f degrees toward the wound%s\n", instance.entityNumber,
+				   ragdoll::RadiansToDegrees( curlRadians ), armAcrossBody ? " (arm held across the body)" : "" );
+	}
+}
+
 // Pushes the body as a hit of this kind and size would. impulseScale shrinks the push for living
 // characters reacting to a hit, whose muscles are fighting back.
 static void ApplyHitImpulse( RagdollInstance &instance, const vec3_t point, const vec3_t direction, int damage, int meansOfDeath,
@@ -635,6 +918,11 @@ static void ApplyHitImpulse( RagdollInstance &instance, const vec3_t point, cons
 	const int hitBody = NearestBody( simulation, hitPoint, distanceFromSurface );
 	const Vector3 pushPoint = ( distanceFromSurface > FARTHEST_HIT_FROM_BODY ) ? simulation.bodies[hitBody].position : hitPoint;
 	simulation.ApplyImpulse( hitBody, pushDirection * ( impulseSize * localizedShare ), pushPoint );
+	if ( instance.isHitReaction )
+	{
+		NoteWound( instance, hitBody, pushPoint );
+		StartFlinch( instance, hitBody, pushPoint, pushDirection, damage );
+	}
 
 	if ( g_ragdollDebug->integer )
 	{
@@ -694,6 +982,65 @@ static bool WantsHitReaction( const gentity_t *target, int meansOfDeath )
 		&& !IsGetUpAnimation( state.legsAnim );
 }
 
+// True if a hit can take control of this living character (see ControlBodyAfterHit): NPCs standing
+// on the ground. Never the player, whose movement is never taken over, nor bosses or saber users,
+// whose duels rely on their own animations, nor characters already taken over by something else.
+static bool CanTakeControlOf( const gentity_t *entity )
+{
+	if ( !g_ragdollShotReactions->integer || !entity->client || entity->s.number == 0 || entity->health <= 0 )
+	{
+		return false;
+	}
+	switch ( entity->client->NPC_class )
+	{
+	case CLASS_DESANN:
+	case CLASS_TAVION:
+	case CLASS_LUKE:
+		return false;
+	default:
+		break;
+	}
+	const playerState_t &state = entity->client->ps;
+	return state.weapon != WP_SABER
+		&& state.groundEntityNum != ENTITYNUM_NONE
+		&& !( state.eFlags & EF_FORCE_GRIPPED )
+		&& !( entity->s.eFlags & EF_LOCKED_TO_WEAPON )
+		&& !IsKnockdownAnimation( state.legsAnim )
+		&& !IsGetUpAnimation( state.legsAnim );
+}
+
+// Hands a living character's body over to its shot reaction: from the next physics step the AI is
+// paused and the body reacts on its own (see ControlBodyAfterHit). The character then follows the
+// body (see KeepCharacterWithBody), keeping its current offset from the hips.
+static void TakeControl( RagdollInstance &instance, const gentity_t *entity )
+{
+	const Vector3 &pelvisPosition = instance.simulation.bodies[ragdoll::BODY_PELVIS].position;
+	instance.characterOffsetFromPelvis = HorizontalPart( Vector3::FromArray( entity->currentOrigin ) - pelvisPosition );
+	instance.controlStartPosition = pelvisPosition;
+	instance.wanderSecondsLeft = 0.0f;
+	instance.isInControl = true;
+	instance.secondsInControl = 0.0f;
+	instance.hasReactionPose = false;
+	instance.isStepping = false;
+	instance.lastDrawnLevelTime = level.time;
+
+	if ( g_ragdollDebug->integer )
+	{
+		gi.Printf( "ragdoll %d: shot reaction takes control (AI paused)\n", instance.entityNumber );
+	}
+}
+
+// How hard hits push this ragdoll compared with a corpse: a body reacting on its own takes most of
+// the push, one whose muscles keep it on its animation much less.
+static float HitImpulseScaleFor( const RagdollInstance &instance )
+{
+	if ( !instance.isHitReaction )
+	{
+		return 1.0f;
+	}
+	return instance.isInControl ? SHOT_REACTION_IMPULSE_SCALE : g_ragdollHitReactionScale->value;
+}
+
 void G_Ragdoll_RecordDamage( gentity_t *target, const vec3_t direction, const vec3_t point, int damage, int meansOfDeath )
 {
 	if ( !target )
@@ -736,12 +1083,15 @@ void G_Ragdoll_RecordDamage( gentity_t *target, const vec3_t direction, const ve
 	RagdollInstance *instance = FindInstance( entityNumber );
 	if ( instance )
 	{
-		const float impulseScale = instance->isHitReaction ? g_ragdollHitReactionScale->value : 1.0f;
-		ApplyHitImpulse( *instance, record.point, record.direction, damage, meansOfDeath, impulseScale );
 		if ( instance->isHitReaction )
 		{
 			instance->secondsSinceLastHit = 0.0f;	// another hit keeps the reaction going
+			if ( !instance->isInControl && direction && PushesLivingCharacters( meansOfDeath ) && CanTakeControlOf( target ) )
+			{
+				TakeControl( *instance, target );	// shot again while getting back to what it was doing
+			}
 		}
+		ApplyHitImpulse( *instance, record.point, record.direction, damage, meansOfDeath, HitImpulseScaleFor( *instance ) );
 		if ( meansOfDeath == MOD_ELECTROCUTE )
 		{
 			StartConvulsing( *instance );
@@ -1186,6 +1536,24 @@ static void StopFollowingAnimation( RagdollInstance &instance )
 	pelvis.positionDrive.enabled = false;
 	pelvis.worldDrive.naturalFrequency = 0.0f;
 
+	// The feet are no longer held to the ground: the whole body is a ragdoll now.
+	RigidBody &rightFoot = simulation.bodies[ragdoll::BODY_RIGHT_FOOT];
+	RigidBody &leftFoot = simulation.bodies[ragdoll::BODY_LEFT_FOOT];
+	rightFoot.positionDrive.enabled = false;
+	rightFoot.worldDrive.naturalFrequency = 0.0f;
+	leftFoot.positionDrive.enabled = false;
+	leftFoot.worldDrive.naturalFrequency = 0.0f;
+
+	// Nothing holds the body up any more: gravity comes back, and the shot reaction lets go.
+	for ( int bodyIndex = 0; bodyIndex < simulation.bodyCount; bodyIndex++ )
+	{
+		simulation.bodies[bodyIndex].gravityScale = 1.0f;
+	}
+	pelvis.positionDrive.horizontalShare = 1.0f;
+	instance.isInControl = false;
+	instance.clutchSecondsLeft = 0.0f;
+	instance.isStepping = false;
+
 	instance.isHitReaction = false;
 	instance.secondsSinceStart = 0.0f;
 	instance.initialPelvisOrientation = pelvis.orientation;
@@ -1480,11 +1848,32 @@ static RagdollInstance *StartRagdoll( gentity_t *entity, int renderTime, vec3_t 
 	instance->secondsSinceLastHit = 0.0f;
 	instance->hasAnimationTargets = false;
 	instance->hasPreviousPelvisTarget = false;
+	instance->isStepping = false;
+	instance->swingingFoot = -1;
+	instance->lastSteppedFoot = -1;
+	instance->hasPreviousCentreOfMass = false;
+	instance->isInControl = false;
+	instance->secondsInControl = 0.0f;
+	instance->lastDrawnLevelTime = level.time;
+	instance->hasReactionPose = false;
+	instance->standingPelvisHeight = -1.0f;
+	instance->wanderSecondsLeft = 0.0f;
+	instance->wanderAcceleration = Vector3( 0.0f, 0.0f, 0.0f );
+	instance->clutchingHand = -1;
+	instance->woundBody = ragdoll::BODY_CHEST;
+	instance->clutchSecondsLeft = 0.0f;
+	instance->flinchDirection = Vector3( 1.0f, 0.0f, 0.0f );
+	instance->flinchRadians = 0.0f;
+	instance->flinchTwistRadians = 0.0f;
+	instance->flinchHipDrop = 0.0f;
+	instance->secondsSinceFlinch = 1.0e6f;
+	const bool takesControl = isHitReaction && CanTakeControlOf( entity );
 
 	// A knockdown keeps all of the push's speed (the Force threw the whole character) and a death
-	// keeps part of the character's running speed. A hit reaction keeps none: the body is carried
-	// along with the character's movement instead (see DriveTowardAnimation).
-	const float entityVelocityShare = isKnockdown ? 1.0f : ( isHitReaction ? 0.0f : ENTITY_VELOCITY_SHARE );
+	// keeps part of the character's running speed. A shot reaction that takes control keeps all of
+	// it (a running character shot carries on stumbling forward); one that follows the animation
+	// keeps none, since the body is carried along with the character's movement instead.
+	const float entityVelocityShare = isKnockdown ? 1.0f : ( isHitReaction ? ( takesControl ? 1.0f : 0.0f ) : ENTITY_VELOCITY_SHARE );
 	InheritAnimationMotion( *instance, earlierFrames, earlierFrameIsValid, modelToWorld,
 							Vector3::FromArray( entity->client->ps.velocity ), entityVelocityShare );
 
@@ -1511,6 +1900,10 @@ static RagdollInstance *StartRagdoll( gentity_t *entity, int renderTime, vec3_t 
 
 	instance->state = isHitReaction ? RAGDOLL_HIT_REACTION : ( reactToDeath ? RAGDOLL_STAGGERING : RAGDOLL_LIMP );
 	SetState( *instance, instance->state );
+	if ( takesControl )
+	{
+		TakeControl( *instance, entity );
+	}
 
 	// React to the blow that killed the character.
 	const DamageRecord &killingHit = lastDamage[entityNumber];
@@ -2065,16 +2458,12 @@ static void ApplySettlingDamping( RagdollInstance &instance )
 // body), rising up the spine, and all of it from the chest up (head and arms lean with the chest).
 static float StumbleLeanShare( int bodyIndex )
 {
+	if ( IsLowerBody( bodyIndex ) )
+	{
+		return 0.0f;
+	}
 	switch ( bodyIndex )
 	{
-	case ragdoll::BODY_PELVIS:
-	case ragdoll::BODY_RIGHT_THIGH:
-	case ragdoll::BODY_RIGHT_SHIN:
-	case ragdoll::BODY_RIGHT_FOOT:
-	case ragdoll::BODY_LEFT_THIGH:
-	case ragdoll::BODY_LEFT_SHIN:
-	case ragdoll::BODY_LEFT_FOOT:
-		return 0.0f;
 	case ragdoll::BODY_LOWER_SPINE:
 		return 0.35f;
 	case ragdoll::BODY_MIDDLE_SPINE:
@@ -2084,27 +2473,557 @@ static float StumbleLeanShare( int bodyIndex )
 	}
 }
 
-// Each physics step of a hit reaction: carries the body along with the character's own movement
-// and pulls every part back toward where the animation has it, so only the jolt from the hit is
-// left to the physics. While the character is stumbling, the upper body is pulled toward a pose
-// leaning with the push instead, and the reaction lasts until the stumble is over.
-static void DriveTowardAnimation( RagdollInstance &instance )
+// The bodies of the two feet, in the order used for the stepping data: right, then left.
+static const int FOOT_BODIES[2] = { ragdoll::BODY_RIGHT_FOOT, ragdoll::BODY_LEFT_FOOT };
+
+// Returns the body's centre of mass and updates its smoothed velocity. The velocity is measured from
+// one physics step to the next, so it includes the body being carried along with the character.
+static Vector3 MeasureCentreOfMass( RagdollInstance &instance, float totalMass )
 {
-	Vector3 leanDirection( 0.0f, 0.0f, 0.0f );
-	float leanRadians = 0.0f;
-	if ( ragdoll::StumbleLean( instance.entityNumber, leanDirection, leanRadians ) )
+	Vector3 centreOfMass( 0.0f, 0.0f, 0.0f );
+	for ( int bodyIndex = 0; bodyIndex < instance.simulation.bodyCount; bodyIndex++ )
 	{
-		instance.secondsSinceLastHit = 0.0f;	// stay physical for the whole stumble
+		centreOfMass += instance.simulation.bodies[bodyIndex].position * instance.rig.bodyMass[bodyIndex];
+	}
+	centreOfMass = centreOfMass / totalMass;
+
+	if ( instance.hasPreviousCentreOfMass )
+	{
+		const Vector3 measuredVelocity = ( centreOfMass - instance.previousCentreOfMass ) / PHYSICS_STEP_SECONDS;
+		instance.centreOfMassVelocity += ( measuredVelocity - instance.centreOfMassVelocity ) * CENTRE_OF_MASS_VELOCITY_SMOOTHING;
 	}
 	else
 	{
-		instance.secondsSinceLastHit += PHYSICS_STEP_SECONDS;
+		instance.centreOfMassVelocity = Vector3( 0.0f, 0.0f, 0.0f );
 	}
-	if ( !instance.hasAnimationTargets )
+	instance.previousCentreOfMass = centreOfMass;
+	instance.hasPreviousCentreOfMass = true;
+	return centreOfMass;
+}
+
+// Euphoria's arm windmilling: turns the arms' target orientations so they are raised out to the
+// sides and swing in circles (the two arms half a circle apart), as people flail to keep their
+// balance. amount (0 to 1) blends from the animation's arm pose to full windmilling. The forearms
+// and hands turn with the upper arms, so the elbows and wrists keep the animation's bend.
+static void WindmillArms( const RagdollInstance &instance, Quaternion *targetRotations, float amount )
+{
+	if ( amount <= 0.0f )
 	{
-		return;		// the animation pose has not been read yet
+		return;
+	}
+	const ragdoll::Rig &rig = instance.rig;
+	const Vector3 forward = ragdoll::Normalized( HorizontalPart(
+		ragdoll::Rotate( targetRotations[ragdoll::BODY_CHEST], rig.forwardAxisInBodySpace[ragdoll::BODY_CHEST] ) ) );
+	if ( ragdoll::LengthSquared( forward ) < ragdoll::SMALL_NUMBER )
+	{
+		return;		// the chest faces straight up or down; there is no sideways to raise the arms toward
+	}
+	const Vector3 left = ragdoll::Normalized( ragdoll::Cross( WORLD_UP, forward ) );
+	const float circleAngle = 2.0f * ragdoll::PI_RADIANS * WINDMILL_CIRCLES_PER_SECOND * instance.secondsSinceStart;
+	const float raiseRadians = ragdoll::DegreesToRadians( WINDMILL_RAISE_DEGREES );
+	const float circleRadians = ragdoll::DegreesToRadians( WINDMILL_CIRCLE_DEGREES );
+
+	for ( int side = 0; side < 2; side++ )
+	{
+		const bool isRightArm = ( side == 0 );
+		const int upperArm = isRightArm ? ragdoll::BODY_RIGHT_UPPER_ARM : ragdoll::BODY_LEFT_UPPER_ARM;
+		const int forearm = isRightArm ? ragdoll::BODY_RIGHT_FOREARM : ragdoll::BODY_LEFT_FOREARM;
+		const int hand = isRightArm ? ragdoll::BODY_RIGHT_HAND : ragdoll::BODY_LEFT_HAND;
+		const Vector3 outward = isRightArm ? left * -1.0f : left;
+		const float phase = circleAngle + ( isRightArm ? 0.0f : ragdoll::PI_RADIANS );
+
+		// Where the upper arm should point: raised out to the side, circling forward and back.
+		const float raise = raiseRadians + circleRadians * cosf( phase );
+		Vector3 desiredDirection = WORLD_UP * -cosf( raise ) + outward * sinf( raise );
+		desiredDirection = ragdoll::Rotate( ragdoll::QuaternionFromAxisAngle( outward, circleRadians * sinf( phase ) ), desiredDirection );
+
+		// Where the animation points it (from the shoulder end of the capsule to the elbow end).
+		const RigidBody &upperArmBody = instance.simulation.bodies[upperArm];
+		const Vector3 armInBodySpace = ragdoll::Normalized( upperArmBody.spheres[1].localCentre - upperArmBody.spheres[0].localCentre );
+		const Vector3 animatedDirection = ragdoll::Rotate( targetRotations[upperArm], armInBodySpace );
+
+		const Quaternion turn = ragdoll::Slerp( Quaternion(), ragdoll::ShortestArc( animatedDirection, desiredDirection ), amount );		const int armBodies[3] = { upperArm, forearm, hand };
+		for ( int armSlot = 0; armSlot < 3; armSlot++ )
+		{
+			targetRotations[armBodies[armSlot]] = ragdoll::NormalizedQuaternion( turn * targetRotations[armBodies[armSlot]] );
+		}
+	}
+}
+
+/*
+==================
+Ground under the feet
+==================
+*/
+
+// Finds the ground under a point, searching from searchUp above it to searchDown below it. Returns
+// false if there is no ground in that range, or if the search starts inside something solid (a wall,
+// or a crate too tall to step onto).
+static bool FindGroundBelow( int ignoreEntityNumber, const Vector3 &point, float searchUp, float searchDown, float &groundHeight )
+{
+	vec3_t start = { point.x, point.y, point.z + searchUp };
+	vec3_t end = { point.x, point.y, point.z - searchDown };
+	vec3_t boxMinimum = { -2.0f, -2.0f, 0.0f };
+	vec3_t boxMaximum = { 2.0f, 2.0f, 1.0f };
+	trace_t trace;
+	gi.trace( &trace, start, boxMinimum, boxMaximum, end, ignoreEntityNumber, MASK_SOLID, G2_NOCOLLIDE, 0 );
+	if ( trace.startsolid || trace.allsolid || trace.fraction >= 1.0f )
+	{
+		return false;
+	}
+	groundHeight = trace.endpos[2];
+	return true;
+}
+
+/*
+==================
+StepToKeepBalance
+
+Euphoria's balancer, simplified: while a character is staggering, its feet are placed by this
+instead of an animation. Each physics step the capture point is worked out: the spot on the ground
+the body's centre of mass is heading for (where it is plus its speed times the time a body of its
+height takes to topple). While the capture point stays between the feet the character stands its
+ground. Once it drifts out, the foot farther from it steps there in a short lifted arc, landing a
+little to its own side so the feet stay apart, and the feet take turns for as long as the body keeps
+moving. Feet are always put down on real ground.
+
+A capture point beyond the reach of a single step cannot be caught, and neither can a step into a
+drop or onto something too tall: the character has misstepped (or tripped) and the function returns
+false (the caller then lets it fall as a ragdoll). pelvisReference is the orientation the feet keep
+their angle to. While staggering, steps land a little short so the body carries on and travels;
+otherwise they land right where the body is going and stop it. footTargets and footRotations
+receive where each foot (right, left) should be.
+==================
+*/
+static bool StepToKeepBalance( RagdollInstance &instance, const Vector3 &centreOfMass, const Quaternion &pelvisReference,
+							   bool staggering, Vector3 *footTargets, Quaternion *footRotations )
+{
+	const Simulation &simulation = instance.simulation;
+	const float modelScale = instance.rig.modelScale;
+	const float footHeight = FOOT_HEIGHT * modelScale;
+
+	if ( !instance.isStepping )
+	{
+		// Start from where the feet are right now, put down on the ground under them (a running
+		// character has one in the air), keeping their angle to the hips.
+		const RigidBody &pelvis = simulation.bodies[ragdoll::BODY_PELVIS];
+		for ( int foot = 0; foot < 2; foot++ )
+		{
+			const RigidBody &footBody = simulation.bodies[FOOT_BODIES[foot]];
+			instance.plantedFootPositions[foot] = footBody.position;
+			float groundHeight;
+			if ( FindGroundBelow( instance.entityNumber, footBody.position, 8.0f * modelScale, 40.0f * modelScale, groundHeight ) )
+			{
+				instance.plantedFootPositions[foot].z = groundHeight + footHeight;
+			}
+			instance.footRotationFromPelvis[foot] = ragdoll::NormalizedQuaternion( ragdoll::Conjugate( pelvis.orientation ) * footBody.orientation );
+		}
+		instance.swingingFoot = -1;
+		instance.lastSteppedFoot = -1;
+		instance.isStepping = true;
 	}
 
+	// A planted foot that the hips have left behind is dragged after them (skidding), rather than
+	// pulling the travelling body back through the leg.
+	const Vector3 &hips = simulation.bodies[ragdoll::BODY_PELVIS].position;
+	for ( int foot = 0; foot < 2; foot++ )
+	{
+		if ( foot == instance.swingingFoot )
+		{
+			continue;
+		}
+		Vector3 &plantedFoot = instance.plantedFootPositions[foot];
+		const Vector3 fromHips = HorizontalPart( plantedFoot - hips );
+		const float distance = ragdoll::Length( fromHips );
+		const float reach = STANDING_LEG_REACH * modelScale;
+		if ( distance > reach )
+		{
+			const Vector3 dragged = fromHips * ( reach / distance );
+			plantedFoot = Vector3( hips.x + dragged.x, hips.y + dragged.y, plantedFoot.z );
+		}
+	}
+
+	const Vector3 *planted = instance.plantedFootPositions;
+	const float groundHeight = ( planted[0].z < planted[1].z ) ? planted[0].z : planted[1].z;
+	const float heightAboveFeet = ( centreOfMass.z - groundHeight > 10.0f * modelScale ) ? centreOfMass.z - groundHeight : 10.0f * modelScale;
+	const float toppleSeconds = sqrtf( heightAboveFeet / ( g_gravity->value > 1.0f ? g_gravity->value : 1.0f ) );
+	const Vector3 capturePoint = HorizontalPart( centreOfMass + instance.centreOfMassVelocity * toppleSeconds );
+
+	bool balanceCaught = true;
+	if ( instance.swingingFoot < 0 )
+	{
+		const Vector3 betweenFeet = HorizontalPart( ( planted[0] + planted[1] ) * 0.5f );
+		if ( ragdoll::Length( capturePoint - betweenFeet ) > STEP_TRIGGER_DISTANCE * modelScale )
+		{
+			// Step with the foot that is farther from where the body is going, but let the feet take
+			// turns as people do: the same foot steps twice only if the other is already close.
+			const float rightFootDistance = ragdoll::Length( HorizontalPart( planted[0] ) - capturePoint );
+			const float leftFootDistance = ragdoll::Length( HorizontalPart( planted[1] ) - capturePoint );
+			int swingFoot = ( rightFootDistance >= leftFootDistance ) ? 0 : 1;
+			if ( swingFoot == instance.lastSteppedFoot )
+			{
+				const float swingDistance = ( swingFoot == 0 ) ? rightFootDistance : leftFootDistance;
+				const float otherDistance = ( swingFoot == 0 ) ? leftFootDistance : rightFootDistance;
+				if ( otherDistance >= ALTERNATE_STEP_SHARE * swingDistance )
+				{
+					swingFoot = 1 - swingFoot;
+				}
+			}
+			instance.lastSteppedFoot = swingFoot;
+			const Vector3 &standingFoot = planted[1 - swingFoot];
+
+			// Land a little to the stepping foot's own side of the fall line, so the feet stay apart.
+			const Vector3 fallDirection = ragdoll::Normalized( HorizontalPart( instance.centreOfMassVelocity ) );
+			Vector3 sideways = HorizontalPart( planted[swingFoot] - standingFoot );
+			if ( ragdoll::LengthSquared( fallDirection ) > ragdoll::SMALL_NUMBER )
+			{
+				sideways = ragdoll::RemoveComponent( sideways, fallDirection );
+			}
+			const Vector3 landingPoint = capturePoint + ragdoll::Normalized( sideways ) * ( STANCE_HALF_WIDTH * modelScale );
+
+			// No step can be longer than a leg allows. Far beyond that, the body cannot be caught.
+			Vector3 step = HorizontalPart( landingPoint - standingFoot );
+			const float stepLength = ragdoll::Length( step );
+			const float longestStep = STEP_LONGEST * modelScale;
+			const char *missReason = "";
+			if ( stepLength > longestStep + MISSTEP_EXTRA_DISTANCE * modelScale )
+			{
+				balanceCaught = false;
+				missReason = ", out of reach";
+			}
+
+			// While staggering, the foot lands most of the way there, so the moving body carries on past
+			// it and the character travels, step after step. Otherwise it lands right where the body is
+			// going and stops it (landing short would leave the body creeping on).
+			if ( staggering )
+			{
+				step = step * STEP_REACH_SHARE;
+			}
+			const float reachedLength = ragdoll::Length( step );
+			if ( reachedLength > longestStep )
+			{
+				step = step * ( longestStep / reachedLength );
+			}
+
+			// The foot must land on ground: not into a drop, not onto something too tall to step onto.
+			Vector3 landing( standingFoot.x + step.x, standingFoot.y + step.y, standingFoot.z );
+			const float standingGround = standingFoot.z - footHeight;
+			float landingGround;
+			if ( FindGroundBelow( instance.entityNumber, Vector3( landing.x, landing.y, standingGround ),
+								  STEP_UP_LIMIT * modelScale, STEP_DOWN_LIMIT * modelScale, landingGround ) )
+			{
+				landing.z = landingGround + footHeight;
+			}
+			else
+			{
+				balanceCaught = false;
+				missReason = ", no ground to land on";
+			}
+
+			instance.swingingFoot = swingFoot;
+			instance.swingSeconds = 0.0f;
+			instance.swingStartPosition = planted[swingFoot];
+			instance.swingTargetPosition = landing;
+
+			if ( g_ragdollDebug->integer )
+			{
+				gi.Printf( "ragdoll %d: steps with the %s foot (%.0f units from the standing foot%s)\n", instance.entityNumber,
+						   swingFoot == 0 ? "right" : "left", ragdoll::Length( step ), missReason );
+			}
+		}
+	}
+	else
+	{
+		instance.swingSeconds += PHYSICS_STEP_SECONDS;
+		if ( instance.swingSeconds >= STEP_SECONDS )
+		{
+			instance.plantedFootPositions[instance.swingingFoot] = instance.swingTargetPosition;	// the foot lands
+			instance.swingingFoot = -1;
+		}
+	}
+
+	for ( int foot = 0; foot < 2; foot++ )
+	{
+		footTargets[foot] = instance.plantedFootPositions[foot];
+		if ( foot == instance.swingingFoot )
+		{
+			const float progress = ragdoll::Clamp( instance.swingSeconds / STEP_SECONDS, 0.0f, 1.0f );
+			const float eased = progress * progress * ( 3.0f - 2.0f * progress );
+			footTargets[foot] = instance.swingStartPosition + ( instance.swingTargetPosition - instance.swingStartPosition ) * eased
+				+ WORLD_UP * ( STEP_LIFT * modelScale * sinf( ragdoll::PI_RADIANS * progress ) );
+		}
+		footRotations[foot] = ragdoll::NormalizedQuaternion( pelvisReference * instance.footRotationFromPelvis[foot] );
+	}
+	return balanceCaught;
+}
+
+/*
+==================
+Hit reaction building blocks
+==================
+*/
+
+// Tilts the upper body's target orientations toward the stagger direction (rotating about this
+// axis tips "up" toward the lean direction).
+static void ApplyStumbleLean( Quaternion *targetRotations, const Vector3 &leanDirection, float leanRadians )
+{
+	const Vector3 leanAxis = ragdoll::Normalized( ragdoll::Cross( WORLD_UP, leanDirection ) );
+	if ( leanRadians <= 0.0f || ragdoll::LengthSquared( leanAxis ) < ragdoll::SMALL_NUMBER )
+	{
+		return;
+	}
+	for ( int bodyIndex = 0; bodyIndex < HUMANOID_BODY_COUNT; bodyIndex++ )
+	{
+		const float leanShare = StumbleLeanShare( bodyIndex );
+		if ( leanShare > 0.0f )
+		{
+			targetRotations[bodyIndex] = ragdoll::NormalizedQuaternion(
+				ragdoll::QuaternionFromAxisAngle( leanAxis, leanRadians * leanShare ) * targetRotations[bodyIndex] );
+		}
+	}
+}
+
+/*
+==================
+ApplyFlinch
+
+Euphoria's flinch toward the wound: turns the target orientations so the spine curls toward where
+the hit landed (doubling over a hit from the front, arching away from one in the back), the head
+dips a little further than the chest, and the wounded side turns away from the shot. The hips and
+legs are left to the balance controller. See StartFlinch for how big each flinch is.
+==================
+*/
+static void ApplyFlinch( const RagdollInstance &instance, Quaternion *targetRotations )
+{
+	const float amount = FlinchAmount( instance );
+	if ( amount <= 0.0f || instance.flinchRadians <= 0.0f )
+	{
+		return;
+	}
+
+	// The wounded side turns away from the shot: the chest and everything above fully, the spine partly.
+	if ( instance.flinchTwistRadians != 0.0f )
+	{
+		for ( int bodyIndex = 0; bodyIndex < HUMANOID_BODY_COUNT; bodyIndex++ )
+		{
+			const float share = StumbleLeanShare( bodyIndex );
+			if ( share > 0.0f )
+			{
+				targetRotations[bodyIndex] = ragdoll::NormalizedQuaternion(
+					ragdoll::QuaternionFromAxisAngle( WORLD_UP, instance.flinchTwistRadians * amount * share ) * targetRotations[bodyIndex] );
+			}
+		}
+	}
+
+	// The spine curls toward the wound (rotating about this axis tips "up" toward the wound), and the
+	// head goes a little further.
+	const Vector3 curlAxis = ragdoll::Normalized( ragdoll::Cross( WORLD_UP, instance.flinchDirection ) );
+	if ( ragdoll::LengthSquared( curlAxis ) < ragdoll::SMALL_NUMBER )
+	{
+		return;
+	}
+	for ( int bodyIndex = 0; bodyIndex < HUMANOID_BODY_COUNT; bodyIndex++ )
+	{
+		float share = StumbleLeanShare( bodyIndex );
+		if ( bodyIndex == ragdoll::BODY_NECK )
+		{
+			share *= 1.3f;
+		}
+		else if ( bodyIndex == ragdoll::BODY_HEAD )
+		{
+			share *= 1.5f;
+		}
+		if ( share > 0.0f )
+		{
+			targetRotations[bodyIndex] = ragdoll::NormalizedQuaternion(
+				ragdoll::QuaternionFromAxisAngle( curlAxis, instance.flinchRadians * amount * share ) * targetRotations[bodyIndex] );
+		}
+	}
+}
+
+// The bodies of one arm: upper arm, forearm and hand. hand is 0 for the right arm, 1 for the left.
+static void ArmBodies( int hand, int &upperArm, int &forearm, int &handBody )
+{
+	upperArm = ( hand == 0 ) ? ragdoll::BODY_RIGHT_UPPER_ARM : ragdoll::BODY_LEFT_UPPER_ARM;
+	forearm = ( hand == 0 ) ? ragdoll::BODY_RIGHT_FOREARM : ragdoll::BODY_LEFT_FOREARM;
+	handBody = ( hand == 0 ) ? ragdoll::BODY_RIGHT_HAND : ragdoll::BODY_LEFT_HAND;
+}
+
+// True if the body belongs to the arm that is clutching a wound right now.
+static bool IsClutchingArmBody( const RagdollInstance &instance, int bodyIndex )
+{
+	if ( instance.clutchingHand < 0 || instance.clutchSecondsLeft <= 0.0f )
+	{
+		return false;
+	}
+	int upperArm, forearm, handBody;
+	ArmBodies( instance.clutchingHand, upperArm, forearm, handBody );
+	return bodyIndex == upperArm || bodyIndex == forearm || bodyIndex == handBody;
+}
+
+/*
+==================
+ReachForWound
+
+Euphoria's hand on the wound: turns the clutching arm's target orientations so the hand goes to
+where the character was hit and stays on it as the body moves. The arm is solved as two segments
+from the shoulder (upper arm, then forearm plus most of the hand), with the elbow bent down and out
+to the side; the hand reaches in quickly, holds, and lets go gently.
+==================
+*/
+static void ReachForWound( const RagdollInstance &instance, Quaternion *targetRotations )
+{
+	if ( instance.clutchingHand < 0 || instance.clutchSecondsLeft <= 0.0f )
+	{
+		return;
+	}
+	const float secondsClutching = CLUTCH_SECONDS - instance.clutchSecondsLeft;
+	const float amount = ragdoll::Clamp( secondsClutching / CLUTCH_REACH_SECONDS, 0.0f, 1.0f )
+		* ragdoll::Clamp( instance.clutchSecondsLeft / CLUTCH_RELEASE_SECONDS, 0.0f, 1.0f );
+	if ( amount <= 0.0f )
+	{
+		return;
+	}
+
+	const Simulation &simulation = instance.simulation;
+	const float modelScale = instance.rig.modelScale;
+	int upperArm, forearm, handBody;
+	ArmBodies( instance.clutchingHand, upperArm, forearm, handBody );
+	const RigidBody &upperArmBody = simulation.bodies[upperArm];
+	const RigidBody &forearmBody = simulation.bodies[forearm];
+	const RigidBody &handRigidBody = simulation.bodies[handBody];
+	const RigidBody &woundedBody = simulation.bodies[instance.woundBody];
+
+	// Where the hand goes: on the wound, resting on the surface rather than inside the body.
+	const Vector3 woundPoint = woundedBody.LocalToWorldPoint( instance.woundInBodySpace );
+	const Vector3 outFromBody = ragdoll::Normalized( woundPoint - woundedBody.position );
+	const Vector3 handTarget = woundPoint + outFromBody * ( CLUTCH_HAND_OFFSET * modelScale );
+
+	const Vector3 shoulder = upperArmBody.LocalToWorldPoint( upperArmBody.spheres[0].localCentre );
+	const Vector3 upperArmAxis = upperArmBody.spheres[1].localCentre - upperArmBody.spheres[0].localCentre;
+	const Vector3 forearmAxis = forearmBody.spheres[1].localCentre - forearmBody.spheres[0].localCentre;
+	const float upperArmLength = ragdoll::Length( upperArmAxis );
+	const float lowerArmLength = ragdoll::Length( forearmAxis )
+		+ 0.6f * ragdoll::Length( handRigidBody.spheres[1].localCentre - handRigidBody.spheres[0].localCentre );
+	const Vector3 toTarget = handTarget - shoulder;
+	const float targetDistance = ragdoll::Length( toTarget );
+	if ( targetDistance < ragdoll::SMALL_NUMBER || upperArmLength < ragdoll::SMALL_NUMBER || lowerArmLength < ragdoll::SMALL_NUMBER )
+	{
+		return;
+	}
+	const Vector3 reachDirection = toTarget / targetDistance;
+	const float fullReach = upperArmLength + lowerArmLength;
+	const float reach = ragdoll::Clamp( targetDistance, 0.35f * fullReach, 0.98f * fullReach );
+
+	// The elbow, by the law of cosines, bent down and out to the side.
+	const float alongReach = ( upperArmLength * upperArmLength - lowerArmLength * lowerArmLength + reach * reach ) / ( 2.0f * reach );
+	const float elbowOffsetSquared = upperArmLength * upperArmLength - alongReach * alongReach;
+	const float elbowOffset = ( elbowOffsetSquared > 0.0f ) ? sqrtf( elbowOffsetSquared ) : 0.0f;
+	const Vector3 left = ragdoll::Normalized( ragdoll::Rotate( simulation.bodies[ragdoll::BODY_CHEST].orientation,
+															   instance.rig.lateralAxisInBodySpace[ragdoll::BODY_CHEST] ) );
+	const Vector3 outward = ( instance.clutchingHand == 0 ) ? left * -1.0f : left;
+	Vector3 bendDirection = ragdoll::RemoveComponent( outward * 0.6f - WORLD_UP, reachDirection );
+	if ( ragdoll::LengthSquared( bendDirection ) < ragdoll::SMALL_NUMBER )
+	{
+		bendDirection = ragdoll::AnyPerpendicular( reachDirection );
+	}
+	bendDirection = ragdoll::Normalized( bendDirection );
+	const Vector3 elbow = shoulder + reachDirection * alongReach + bendDirection * elbowOffset;
+	const Vector3 wrist = shoulder + reachDirection * reach;
+
+	// Turn the arm's targets into that shape; each segment carries the ones below it.
+	const Quaternion upperArmTurn = ragdoll::Slerp( Quaternion(), ragdoll::ShortestArc(
+		ragdoll::Rotate( targetRotations[upperArm], ragdoll::Normalized( upperArmAxis ) ), ragdoll::Normalized( elbow - shoulder ) ), amount );
+	targetRotations[upperArm] = ragdoll::NormalizedQuaternion( upperArmTurn * targetRotations[upperArm] );
+	targetRotations[forearm] = ragdoll::NormalizedQuaternion( upperArmTurn * targetRotations[forearm] );
+	targetRotations[handBody] = ragdoll::NormalizedQuaternion( upperArmTurn * targetRotations[handBody] );
+	const Quaternion forearmTurn = ragdoll::Slerp( Quaternion(), ragdoll::ShortestArc(
+		ragdoll::Rotate( targetRotations[forearm], ragdoll::Normalized( forearmAxis ) ), ragdoll::Normalized( wrist - elbow ) ), amount );
+	targetRotations[forearm] = ragdoll::NormalizedQuaternion( forearmTurn * targetRotations[forearm] );
+	targetRotations[handBody] = ragdoll::NormalizedQuaternion( forearmTurn * targetRotations[handBody] );
+}
+
+// Sets every joint's muscle toward the target orientations, with strengths for the situation: a
+// flinch while following the animation (legs strongest, arms weakest so they fling), or tense
+// muscles while a shot reaction has control. Stepping legs give, so they can reach the placed feet,
+// and staggering legs are loose, so they swing under the travelling hips; windmilling (staggering)
+// and clutching arms are strong, so they move instead of trailing.
+static void SetHitReactionMuscles( RagdollInstance &instance, const Quaternion *targetRotations, bool staggering )
+{
+	const Simulation &simulation = instance.simulation;
+	for ( int jointIndex = 0; jointIndex < HUMANOID_JOINT_COUNT; jointIndex++ )
+	{
+		const Joint &joint = simulation.joints[jointIndex];
+		const Quaternion targetRelative = ragdoll::NormalizedQuaternion(
+			ragdoll::Conjugate( targetRotations[joint.parentBodyIndex] ) * targetRotations[joint.childBodyIndex] );
+
+		float naturalFrequency;
+		switch ( ragdoll::MuscleGroupForBody( joint.childBodyIndex ) )
+		{
+		case ragdoll::MUSCLE_GROUP_SPINE:
+			naturalFrequency = instance.isInControl ? CONTROL_SPINE_FREQUENCY : HIT_REACTION_SPINE_FREQUENCY;
+			break;
+		case ragdoll::MUSCLE_GROUP_NECK:
+			naturalFrequency = instance.isInControl ? CONTROL_NECK_FREQUENCY : HIT_REACTION_NECK_FREQUENCY;
+			break;
+		case ragdoll::MUSCLE_GROUP_ARMS:
+			if ( IsClutchingArmBody( instance, joint.childBodyIndex ) )
+			{
+				naturalFrequency = CLUTCH_ARM_FREQUENCY;
+			}
+			else if ( staggering )
+			{
+				naturalFrequency = WINDMILL_ARM_FREQUENCY;
+			}
+			else
+			{
+				naturalFrequency = instance.isInControl ? CONTROL_ARM_FREQUENCY : HIT_REACTION_ARM_FREQUENCY;
+			}
+			break;
+		default:
+			if ( staggering && instance.isInControl )
+			{
+				naturalFrequency = STAGGER_LEG_FREQUENCY;
+			}
+			else
+			{
+				naturalFrequency = instance.isStepping ? STEPPING_LEG_FREQUENCY : HIT_REACTION_LEG_FREQUENCY;
+			}
+			break;
+		}
+		SetMuscle( instance, jointIndex, targetRelative, naturalFrequency );
+	}
+}
+
+// Holds each foot (right, left) on its spot and at its angle.
+static void HoldFeet( RagdollInstance &instance, const Vector3 *footTargets, const Quaternion *footRotations, float totalMass )
+{
+	for ( int foot = 0; foot < 2; foot++ )
+	{
+		RigidBody &footBody = instance.simulation.bodies[FOOT_BODIES[foot]];
+		footBody.positionDrive.enabled = true;
+		footBody.positionDrive.targetPosition = footTargets[foot];
+		footBody.positionDrive.stiffness = totalMass * FOOT_PLANT_FREQUENCY * FOOT_PLANT_FREQUENCY * FOOT_PLANT_WEIGHT_SHARE;
+		footBody.positionDrive.damping = HIT_REACTION_PELVIS_DAMPING;
+		footBody.positionDrive.horizontalShare = 1.0f;
+		footBody.worldDrive.targetOrientation = footRotations[foot];
+		footBody.worldDrive.naturalFrequency = FOOT_PLANT_FREQUENCY;
+		footBody.worldDrive.dampingRatio = 1.0f;
+	}
+}
+
+/*
+==================
+FollowAnimation
+
+A hit reaction that leaves the character in charge (the player's flinches, and an NPC blending back
+into its animation after a shot reaction): carries the body along with the character's own movement
+and pulls every part toward where the animation has it, so only the jolt from the hit is left to
+the physics.
+==================
+*/
+static void FollowAnimation( RagdollInstance &instance, bool stumbling, const Vector3 &leanDirection, float leanRadians )
+{
 	Simulation &simulation = instance.simulation;
 	const Transform &pelvisTarget = instance.animationBodyTargets[ragdoll::BODY_PELVIS];
 
@@ -2124,51 +3043,282 @@ static void DriveTowardAnimation( RagdollInstance &instance )
 	instance.previousPelvisTarget = pelvisTarget;
 	instance.hasPreviousPelvisTarget = true;
 
-	// The orientation each body should have: the animation's, tilted toward the stumble direction
-	// for the upper body (rotating about this axis tips "up" toward the lean direction).
 	Quaternion targetRotations[HUMANOID_BODY_COUNT];
-	const Vector3 leanAxis = ragdoll::Normalized( ragdoll::Cross( WORLD_UP, leanDirection ) );
-	const bool leaning = leanRadians > 0.0f && ragdoll::LengthSquared( leanAxis ) > ragdoll::SMALL_NUMBER;
 	for ( int bodyIndex = 0; bodyIndex < HUMANOID_BODY_COUNT; bodyIndex++ )
 	{
 		targetRotations[bodyIndex] = instance.animationBodyTargets[bodyIndex].rotation;
-		const float leanShare = StumbleLeanShare( bodyIndex );
-		if ( leaning && leanShare > 0.0f )
-		{
-			targetRotations[bodyIndex] = ragdoll::NormalizedQuaternion(
-				ragdoll::QuaternionFromAxisAngle( leanAxis, leanRadians * leanShare ) * targetRotations[bodyIndex] );
-		}
 	}
-
-	// Strong muscles toward the animated pose: legs strongest so the character keeps its footing,
-	// arms weakest so they fling.
-	for ( int jointIndex = 0; jointIndex < HUMANOID_JOINT_COUNT; jointIndex++ )
+	ApplyStumbleLean( targetRotations, leanDirection, leanRadians );
+	if ( stumbling )
 	{
-		const Joint &joint = simulation.joints[jointIndex];
-		const Quaternion targetRelative = ragdoll::NormalizedQuaternion(
-			ragdoll::Conjugate( targetRotations[joint.parentBodyIndex] ) * targetRotations[joint.childBodyIndex] );
-
-		float naturalFrequency;
-		switch ( ragdoll::MuscleGroupForBody( ragdoll::BodyIndexForJoint( jointIndex ) ) )
-		{
-		case ragdoll::MUSCLE_GROUP_SPINE:	naturalFrequency = HIT_REACTION_SPINE_FREQUENCY;	break;
-		case ragdoll::MUSCLE_GROUP_NECK:	naturalFrequency = HIT_REACTION_NECK_FREQUENCY;		break;
-		case ragdoll::MUSCLE_GROUP_ARMS:	naturalFrequency = HIT_REACTION_ARM_FREQUENCY;		break;
-		default:							naturalFrequency = HIT_REACTION_LEG_FREQUENCY;		break;
-		}
-		SetMuscle( instance, jointIndex, targetRelative, naturalFrequency );
+		WindmillArms( instance, targetRotations,
+					  ragdoll::Clamp( leanRadians / ragdoll::DegreesToRadians( WINDMILL_FULL_AT_LEAN_DEGREES ), 0.0f, 1.0f ) );
 	}
+	SetHitReactionMuscles( instance, targetRotations, stumbling );
 
 	// The pelvis is held to the animated pelvis, in position and orientation.
+	const float totalMass = TotalRagdollMass( instance );
 	RigidBody &pelvis = simulation.bodies[ragdoll::BODY_PELVIS];
 	pelvis.positionDrive.enabled = true;
 	pelvis.positionDrive.targetPosition = pelvisTarget.position;
-	pelvis.positionDrive.stiffness = TotalRagdollMass( instance ) * HIT_REACTION_PELVIS_FREQUENCY * HIT_REACTION_PELVIS_FREQUENCY;
+	pelvis.positionDrive.stiffness = totalMass * HIT_REACTION_PELVIS_FREQUENCY * HIT_REACTION_PELVIS_FREQUENCY;
 	pelvis.positionDrive.damping = HIT_REACTION_PELVIS_DAMPING;
+	pelvis.positionDrive.horizontalShare = 1.0f;
 	pelvis.worldDrive.targetOrientation = pelvisTarget.rotation;
 	pelvis.worldDrive.naturalFrequency = HIT_REACTION_PELVIS_FREQUENCY;
 	pelvis.worldDrive.dampingRatio = 1.0f;
 	simulation.bodies[ragdoll::BODY_CHEST].worldDrive.naturalFrequency = 0.0f;
+
+	// The feet stay where the animation has them (or step, if somehow staggering while following).
+	const Vector3 centreOfMass = MeasureCentreOfMass( instance, totalMass );
+	Vector3 footTargets[2];
+	Quaternion footRotations[2];
+	if ( stumbling )
+	{
+		if ( !StepToKeepBalance( instance, centreOfMass, pelvisTarget.rotation, stumbling, footTargets, footRotations ) )
+		{
+			ragdoll::LoseFooting( instance.entityNumber, HorizontalPart( instance.centreOfMassVelocity ) );
+		}
+	}
+	else
+	{
+		instance.isStepping = false;
+		for ( int foot = 0; foot < 2; foot++ )
+		{
+			footTargets[foot] = instance.animationBodyTargets[FOOT_BODIES[foot]].position;
+			footRotations[foot] = instance.animationBodyTargets[FOOT_BODIES[foot]].rotation;
+		}
+	}
+	HoldFeet( instance, footTargets, footRotations, totalMass );
+}
+
+// The body has its balance back: the character faces the way its hips now face, the AI carries on,
+// and the drawn pose blends from the body back into the animation (see PoseHitReaction).
+static void RecoverControl( RagdollInstance &instance, gentity_t *entity )
+{
+	if ( entity && entity->inuse && entity->client )
+	{
+		const RigidBody &pelvis = instance.simulation.bodies[ragdoll::BODY_PELVIS];
+		const Vector3 hipsForward = HorizontalPart(
+			ragdoll::Rotate( pelvis.orientation, instance.rig.forwardAxisInBodySpace[ragdoll::BODY_PELVIS] ) );
+		if ( ragdoll::Length( hipsForward ) > 0.1f )
+		{
+			const float yawDegrees = ragdoll::RadiansToDegrees( atan2f( hipsForward.y, hipsForward.x ) );
+			entity->client->ps.viewangles[YAW] = yawDegrees;
+			entity->currentAngles[YAW] = yawDegrees;
+			if ( entity->NPC )
+			{
+				entity->NPC->desiredYaw = yawDegrees;
+				entity->NPC->lockedDesiredYaw = yawDegrees;
+			}
+		}
+	}
+	instance.isInControl = false;
+	instance.clutchSecondsLeft = 0.0f;
+	instance.isStepping = false;
+	instance.hasPreviousPelvisTarget = false;
+	instance.secondsSinceLastHit = HIT_REACTION_HOLD_SECONDS;	// start blending back to the animation now
+	instance.simulation.bodies[ragdoll::BODY_PELVIS].positionDrive.horizontalShare = 1.0f;
+
+	if ( g_ragdollDebug->integer )
+	{
+		// How far the hit turned the body, for tuning: the hips' heading now against when the shot landed.
+		const Vector3 &forwardInPelvis = instance.rig.forwardAxisInBodySpace[ragdoll::BODY_PELVIS];
+		const Vector3 headingNow = HorizontalPart( ragdoll::Rotate( instance.simulation.bodies[ragdoll::BODY_PELVIS].orientation, forwardInPelvis ) );
+		const Vector3 headingThen = HorizontalPart( ragdoll::Rotate( instance.reactionPelvisRotation, forwardInPelvis ) );
+		const float turnedDegrees = ragdoll::RadiansToDegrees( atan2f( ragdoll::Cross( headingThen, headingNow ).z, ragdoll::Dot( headingThen, headingNow ) ) );
+		const float travelled = ragdoll::Length( HorizontalPart( instance.simulation.bodies[ragdoll::BODY_PELVIS].position - instance.controlStartPosition ) );
+		gi.Printf( "ragdoll %d: regains its balance after %.1f seconds, turned %.0f degrees, moved %.0f units (AI resumes)\n",
+				   instance.entityNumber, instance.secondsInControl, turnedDegrees, travelled );
+	}
+}
+
+/*
+==================
+ControlBodyAfterHit
+
+A shot reaction in control of an NPC, in the style of GTA IV/V and Red Dead Redemption: the AI is
+paused (see G_Ragdoll_IsControllingCharacter) and the body no longer follows an animation. Instead,
+as Euphoria's behaviours do:
+  * the muscles hold the posture the shot caught the character in, tense enough to take the jolt
+    and come back, with gravity compensated so nothing sags;
+  * the legs hold the hips up at standing height but let them be shoved sideways, and the balance
+    controller steps the feet to catch the body;
+  * a hard hit sends the whole body staggering (the balance module decides how hard), the upper body
+    leans with it and the arms windmill, while the legs brake it;
+  * the free hand clutches the wound.
+Once the body is balanced and still again, control goes back to the animation and the AI carries
+on. A body that no step can catch falls over (LoseFooting).
+==================
+*/
+static void ControlBodyAfterHit( RagdollInstance &instance, bool stumbling, const Vector3 &leanDirection, float leanRadians )
+{
+	Simulation &simulation = instance.simulation;
+	RigidBody &pelvis = simulation.bodies[ragdoll::BODY_PELVIS];
+	const float totalMass = TotalRagdollMass( instance );
+	const float modelScale = instance.rig.modelScale;
+	instance.secondsInControl += PHYSICS_STEP_SECONDS;
+
+	// The first step: remember the posture the shot caught the character in, relative to its hips.
+	if ( !instance.hasReactionPose )
+	{
+		instance.reactionPelvisRotation = pelvis.orientation;
+		for ( int bodyIndex = 0; bodyIndex < HUMANOID_BODY_COUNT; bodyIndex++ )
+		{
+			instance.reactionPoseFromPelvis[bodyIndex] = ragdoll::NormalizedQuaternion(
+				ragdoll::Conjugate( pelvis.orientation ) * simulation.bodies[bodyIndex].orientation );
+		}
+		instance.hasReactionPose = true;
+		instance.isStepping = false;			// the feet are put down on the ground again below
+		instance.standingPelvisHeight = -1.0f;	// measured once they are
+	}
+
+	// A hard hit sends the whole body staggering; the legs brake it.
+	Vector3 push;
+	if ( ragdoll::TakeStumblePush( instance.entityNumber, push ) )
+	{
+		for ( int bodyIndex = 0; bodyIndex < simulation.bodyCount; bodyIndex++ )
+		{
+			simulation.bodies[bodyIndex].linearVelocity += push;
+		}
+	}
+	const float braking = expf( -( stumbling ? STAGGER_BRAKING : SETTLE_BRAKING ) * PHYSICS_STEP_SECONDS );
+	for ( int bodyIndex = 0; bodyIndex < simulation.bodyCount; bodyIndex++ )
+	{
+		Vector3 &velocity = simulation.bodies[bodyIndex].linearVelocity;
+		velocity.x *= braking;
+		velocity.y *= braking;
+	}
+
+	// Struggling for balance: while staggering, the legs fighting the body push it about, so the
+	// stagger wanders across the ground instead of running in a straight line.
+	if ( stumbling )
+	{
+		instance.wanderSecondsLeft -= PHYSICS_STEP_SECONDS;
+		if ( instance.wanderSecondsLeft <= 0.0f )
+		{
+			const Vector3 travel = ragdoll::Normalized( HorizontalPart( leanDirection ) );
+			const Vector3 sideways = ragdoll::Cross( WORLD_UP, travel );
+			instance.wanderAcceleration = ( sideways * Q_flrand( -1.0f, 1.0f ) + travel * Q_flrand( -0.3f, 0.3f ) )
+				* ( STAGGER_WANDER_ACCELERATION * modelScale );
+			instance.wanderSecondsLeft = Q_flrand( STAGGER_WANDER_SHORTEST_SECONDS, STAGGER_WANDER_LONGEST_SECONDS );
+		}
+		for ( int bodyIndex = 0; bodyIndex < simulation.bodyCount; bodyIndex++ )
+		{
+			simulation.bodies[bodyIndex].linearVelocity += instance.wanderAcceleration * PHYSICS_STEP_SECONDS;
+		}
+	}
+
+	// Upright hips facing the way they faced when the shot landed: a hit twists them for a moment,
+	// and the legs turn them back (left free to turn, a hit on one side spins the body around).
+	const Quaternion &uprightPelvis = instance.reactionPelvisRotation;
+
+	// Staggering, the whole body tips the way it is going (the hips lead), so the feet keep having to
+	// catch it and the character travels instead of stamping on the spot.
+	Quaternion bodyTilt;
+	const Vector3 tiltAxis = ragdoll::Normalized( ragdoll::Cross( WORLD_UP, leanDirection ) );
+	if ( stumbling && leanRadians > 0.0f && ragdoll::LengthSquared( tiltAxis ) > ragdoll::SMALL_NUMBER )
+	{
+		const float staggerStrength = ragdoll::Clamp( leanRadians / ragdoll::DegreesToRadians( WINDMILL_FULL_AT_LEAN_DEGREES ), 0.0f, 1.0f );
+		bodyTilt = ragdoll::QuaternionFromAxisAngle( tiltAxis, ragdoll::DegreesToRadians( STAGGER_BODY_TILT_DEGREES ) * staggerStrength );
+	}
+	const Quaternion leaningPelvis = ragdoll::NormalizedQuaternion( bodyTilt * uprightPelvis );
+	pelvis.worldDrive.targetOrientation = leaningPelvis;
+	pelvis.worldDrive.naturalFrequency = UPRIGHT_PELVIS_FREQUENCY;
+	pelvis.worldDrive.dampingRatio = 1.0f;
+	simulation.bodies[ragdoll::BODY_CHEST].worldDrive.naturalFrequency = 0.0f;
+
+	// Every body's target: the caught posture carried by the upright hips, curled toward the wound and hunched while staggering,
+	// arms windmilling to keep balance, and the free hand on the wound.
+	Quaternion targetRotations[HUMANOID_BODY_COUNT];
+	for ( int bodyIndex = 0; bodyIndex < HUMANOID_BODY_COUNT; bodyIndex++ )
+	{
+		targetRotations[bodyIndex] = ragdoll::NormalizedQuaternion( leaningPelvis * instance.reactionPoseFromPelvis[bodyIndex] );
+	}
+	ApplyFlinch( instance, targetRotations );
+	ApplyStumbleLean( targetRotations, leanDirection * -1.0f, leanRadians * STAGGER_HUNCH_SHARE );	// a little hunched toward the shots
+	if ( stumbling )
+	{
+		WindmillArms( instance, targetRotations,
+					  ragdoll::Clamp( leanRadians / ragdoll::DegreesToRadians( WINDMILL_FULL_AT_LEAN_DEGREES ), 0.0f, 1.0f ) );
+	}
+	ReachForWound( instance, targetRotations );
+	if ( instance.clutchSecondsLeft > 0.0f )
+	{
+		instance.clutchSecondsLeft -= PHYSICS_STEP_SECONDS;
+	}
+	SetHitReactionMuscles( instance, targetRotations, stumbling );
+
+	// The feet: placed by the balance controller, always on the ground.
+	const Vector3 centreOfMass = MeasureCentreOfMass( instance, totalMass );
+	Vector3 footTargets[2];
+	Quaternion footRotations[2];
+	if ( !StepToKeepBalance( instance, centreOfMass, uprightPelvis, stumbling, footTargets, footRotations ) )
+	{
+		ragdoll::LoseFooting( instance.entityNumber, HorizontalPart( instance.centreOfMassVelocity ) );
+	}
+	HoldFeet( instance, footTargets, footRotations, totalMass );
+
+	// The hips: held up at standing height above the feet by the legs, which also pull them gently
+	// back over the feet but let a hit shove them sideways.
+	const Vector3 *planted = instance.plantedFootPositions;
+	const float feetHeight = ( planted[0].z < planted[1].z ) ? planted[0].z : planted[1].z;
+	if ( instance.standingPelvisHeight < 0.0f )
+	{
+		instance.standingPelvisHeight = pelvis.position.z - feetHeight;
+	}
+	const Vector3 betweenFeet = ( planted[0] + planted[1] ) * 0.5f;
+	pelvis.positionDrive.enabled = true;
+	const float kneesGive = instance.flinchHipDrop * FlinchAmount( instance ) * modelScale;	// the knees give a little when hit
+	pelvis.positionDrive.targetPosition = Vector3( betweenFeet.x, betweenFeet.y, feetHeight + instance.standingPelvisHeight - kneesGive );
+	pelvis.positionDrive.stiffness = totalMass * HIP_SUPPORT_FREQUENCY * HIP_SUPPORT_FREQUENCY;
+	pelvis.positionDrive.damping = HIT_REACTION_PELVIS_DAMPING;
+	pelvis.positionDrive.horizontalShare = stumbling ? 0.0f : HIP_SUPPORT_HORIZONTAL_SHARE;	// staggering, the feet chase the hips
+
+	// Balanced and still again (or long enough regardless): the character gets its body back.
+	const float horizontalSpeed = ragdoll::Length( HorizontalPart( instance.centreOfMassVelocity ) );
+	const bool settled = instance.secondsSinceLastHit >= SHOT_REACTION_SHORTEST_SECONDS
+		&& !stumbling
+		&& instance.swingingFoot < 0
+		&& horizontalSpeed < RECOVERED_SPEED * modelScale;
+	if ( settled || instance.secondsInControl >= LONGEST_CONTROL_SECONDS )
+	{
+		RecoverControl( instance, &g_entities[instance.entityNumber] );
+	}
+}
+
+// Each physics step of a hit reaction, whichever kind it is.
+static void DriveHitReaction( RagdollInstance &instance )
+{
+	Vector3 leanDirection( 0.0f, 0.0f, 0.0f );
+	float leanRadians = 0.0f;
+	const bool stumbling = ragdoll::StumbleLean( instance.entityNumber, leanDirection, leanRadians );
+	if ( stumbling )
+	{
+		instance.secondsSinceLastHit = 0.0f;	// stay physical for the whole stagger
+	}
+	else
+	{
+		instance.secondsSinceLastHit += PHYSICS_STEP_SECONDS;
+	}
+	instance.secondsSinceFlinch += PHYSICS_STEP_SECONDS;
+
+	// Gravity compensation: a living character's muscles hold its body up, so the body reacts to
+	// hits without sagging. Gravity comes back if the character dies or falls (StopFollowingAnimation).
+	Simulation &simulation = instance.simulation;
+	for ( int bodyIndex = 0; bodyIndex < simulation.bodyCount; bodyIndex++ )
+	{
+		simulation.bodies[bodyIndex].gravityScale = 0.0f;
+	}
+
+	if ( instance.isInControl )
+	{
+		ControlBodyAfterHit( instance, stumbling, leanDirection, leanRadians );
+	}
+	else if ( instance.hasAnimationTargets )
+	{
+		FollowAnimation( instance, stumbling, leanDirection, leanRadians );
+	}
 
 	// Keep a big hit from spinning a light limb wildly.
 	for ( int bodyIndex = 0; bodyIndex < simulation.bodyCount; bodyIndex++ )
@@ -2238,7 +3388,7 @@ static void StepAllRagdolls( int renderTime )
 			instance.secondsSinceStart += PHYSICS_STEP_SECONDS;
 			if ( instance.isHitReaction )
 			{
-				DriveTowardAnimation( instance );
+				DriveHitReaction( instance );
 			}
 			else
 			{
@@ -2609,6 +3759,28 @@ flinches without ever stopping what it is doing.
 ==================
 */
 
+// While a shot reaction has control, the character goes where its body goes (a stagger moves it),
+// instead of the body following the character. The collision box is swept there, so it never ends
+// up inside a wall, and the movement code (given nothing to do, see G_Ragdoll_IsControllingCharacter)
+// keeps it on the ground.
+static void KeepCharacterWithBody( const RagdollInstance &instance, gentity_t *entity )
+{
+	const Vector3 &pelvisPosition = instance.simulation.bodies[ragdoll::BODY_PELVIS].position;
+	vec3_t destination = { pelvisPosition.x + instance.characterOffsetFromPelvis.x,
+						   pelvisPosition.y + instance.characterOffsetFromPelvis.y,
+						   entity->currentOrigin[2] };
+	trace_t trace;
+	gi.trace( &trace, entity->currentOrigin, entity->mins, entity->maxs, destination, entity->s.number, entity->clipmask, G2_NOCOLLIDE, 0 );
+	if ( !trace.startsolid && !trace.allsolid && trace.fraction > 0.0f )
+	{
+		G_SetOrigin( entity, trace.endpos );
+		VectorCopy( trace.endpos, entity->client->ps.origin );
+		gi.linkentity( entity );
+	}
+	entity->client->ps.velocity[0] = 0.0f;
+	entity->client->ps.velocity[1] = 0.0f;
+}
+
 // Each frame while reacting to a hit: reads the live animation (the target the muscles pull toward
 // during the next physics steps) and draws a blend of the physical body and the animation.
 static void PoseHitReaction( RagdollInstance &instance, gentity_t *entity, int renderTime, vec3_t renderOrigin, vec3_t renderAxis[3] )
@@ -2637,9 +3809,10 @@ static void PoseHitReaction( RagdollInstance &instance, gentity_t *entity, int r
 	}
 	instance.hasAnimationTargets = everyBodyWasRead;
 
-	// Fully physical just after a hit, then an eased fade back to the animation.
+	// Fully physical while a shot reaction has control and just after a hit, then an eased fade back
+	// to the animation.
 	const float fade = ragdoll::Clamp( ( instance.secondsSinceLastHit - HIT_REACTION_HOLD_SECONDS ) / HIT_REACTION_FADE_SECONDS, 0.0f, 1.0f );
-	const float physicsWeight = 1.0f - fade * fade * ( 3.0f - 2.0f * fade );
+	const float physicsWeight = instance.isInControl ? 1.0f : 1.0f - fade * fade * ( 3.0f - 2.0f * fade );
 	if ( physicsWeight <= 0.0f || !everyBodyWasRead )
 	{
 		if ( g_ragdollDebug->integer )
@@ -2737,7 +3910,7 @@ qboolean G_Ragdoll_UpdateAndPose( gentity_t *entity, int renderTime, vec3_t rend
 				instance = StartRagdoll( entity, renderTime, renderOrigin, renderAxis, false, RAGDOLL_KIND_HIT_REACTION );
 				if ( instance )
 				{
-					ApplyHitImpulse( *instance, hit.point, hit.direction, hit.damage, hit.meansOfDeath, g_ragdollHitReactionScale->value );
+					ApplyHitImpulse( *instance, hit.point, hit.direction, hit.damage, hit.meansOfDeath, HitImpulseScaleFor( *instance ) );
 				}
 			}
 		}
@@ -2783,6 +3956,11 @@ qboolean G_Ragdoll_UpdateAndPose( gentity_t *entity, int renderTime, vec3_t rend
 		{
 			ReleaseInstance( *instance, true );
 			return qfalse;
+		}
+		instance->lastDrawnLevelTime = level.time;
+		if ( instance->isInControl )
+		{
+			KeepCharacterWithBody( *instance, entity );
 		}
 		PoseHitReaction( *instance, entity, renderTime, renderOrigin, renderAxis );
 		return qfalse;		// drawn where the game puts the character, so nothing to replace
@@ -2881,6 +4059,38 @@ qboolean G_Ragdoll_UpdateAndPose( gentity_t *entity, int renderTime, vec3_t rend
 	if ( g_ragdollDebug->integer >= 2 && ( instance->secondsSinceStart < 0.05f || ( renderTime / 50 ) % 40 == 0 ) )
 	{
 		PrintPoseError( *instance, entity, bodyTransforms, renderTime, renderOrigin, renderAngles );
+	}
+	return qtrue;
+}
+
+/*
+==================
+G_Ragdoll_IsControllingCharacter
+==================
+*/
+qboolean G_Ragdoll_IsControllingCharacter( gentity_t *entity )
+{
+	if ( !entity || !g_ragdoll || !g_ragdoll->integer )
+	{
+		return qfalse;
+	}
+	const int entityNumber = EntityIndex( entity );
+	if ( entityNumber <= 0 || entityNumber >= MAX_GENTITIES )
+	{
+		return qfalse;
+	}
+	RagdollInstance *instance = FindInstance( entityNumber );
+	if ( !instance || !instance->isHitReaction || !instance->isInControl )
+	{
+		return qfalse;
+	}
+
+	// Out of sight for a while, the body is no longer being simulated: give the character its body
+	// back rather than leave it frozen.
+	if ( level.time - instance->lastDrawnLevelTime > CONTROL_WITHOUT_DRAWING_MILLISECONDS )
+	{
+		RecoverControl( *instance, entity );
+		return qfalse;
 	}
 	return qtrue;
 }

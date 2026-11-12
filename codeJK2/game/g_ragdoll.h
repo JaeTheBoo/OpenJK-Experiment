@@ -34,10 +34,18 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 //   6. Asleep      - once still, the body stops being simulated (a later hit wakes it again).
 //
 // Living characters:
-//   * Hit reactions: a shot or saber hit makes a living character a powered ragdoll for about half a
-//     second. Strong muscles pull every part toward the live animation while the hit shoves the body,
-//     so the character flinches (torso twisting, head snapping, arms flinging) without ever stopping
-//     what it is doing. Killed or knocked down mid-reaction, the body carries on with its momentum.
+//   * Shot reactions (NPCs, in the style of GTA IV/V and Red Dead Redemption): a hit takes control of
+//     the character. Its AI pauses (no walking, no shooting) and its body reacts on its own: the hit
+//     jolts it, tense muscles hold its posture against the jolt (gravity is compensated, so nothing
+//     sags), a free hand clutches the wound, and a hard hit sends it staggering, leaning, windmilling
+//     its arms, while a balance controller steps its feet to catch it. The character goes where its
+//     body goes. Once balanced and still it blends back into its animation and the AI carries on; a
+//     body no step can catch falls over (a knockdown). Bosses and saber users only flinch, so their
+//     duels keep their own animations. Switch off with g_ragdollShotReactions 0.
+//   * Flinches (the player, and NPCs when shot reactions are off): a powered ragdoll for about half a
+//     second, with strong muscles pulling every part toward the live animation while the hit shoves
+//     the body, so the character flinches without ever stopping what it is doing.
+//   * Killed or knocked down mid-reaction, the body carries on with its momentum.
 //   * Stumbles: hits add up. A character knocked far enough off balance stumbles a step or two in
 //     the direction of the push, leaning with it, and one pushed further falls over into a
 //     knockdown. See g_ragdoll_balance.h.
@@ -135,5 +143,16 @@ Returns qtrue if the character is a ragdoll and the outputs were changed.
 ==================
 */
 qboolean G_Ragdoll_UpdateAndPose( gentity_t *entity, int renderTime, vec3_t renderOrigin, vec3_t renderAxis[3], vec3_t renderAngles );
+
+/*
+==================
+G_Ragdoll_IsControllingCharacter
+
+True while a shot reaction has taken control of this NPC's body. Called by ClientThink_real before
+the character moves: while it returns qtrue the character neither walks nor shoots (its AI keeps
+thinking, so it carries on from where it was once it has its balance back).
+==================
+*/
+qboolean G_Ragdoll_IsControllingCharacter( gentity_t *entity );
 
 #endif // G_RAGDOLL_H

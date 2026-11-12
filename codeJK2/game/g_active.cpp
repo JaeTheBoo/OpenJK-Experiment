@@ -29,6 +29,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "Q3_Interface.h"
 #include "wp_saber.h"
 #include "g_icarus.h"
+#include "g_ragdoll.h"
 
 #ifdef _DEBUG
 	#include <float.h>
@@ -2745,6 +2746,16 @@ extern cvar_t	*g_skippingcin;
 
 	//play/stop any looping sounds tied to controlled movement
 	G_CheckMovingLoopingSounds( ent, ucmd );
+
+	// An NPC reacting physically to being shot has lost control of its body (see g_ragdoll.h): it
+	// neither walks nor shoots until it has its balance back. Its AI keeps thinking meanwhile.
+	if ( G_Ragdoll_IsControllingCharacter( ent ) )
+	{
+		ucmd->forwardmove = 0;
+		ucmd->rightmove = 0;
+		ucmd->upmove = 0;
+		ucmd->buttons = 0;
+	}
 
 	//remember your last angles
 	VectorCopy ( ent->client->ps.viewangles, ent->lastAngles );

@@ -529,6 +529,8 @@ bool BuildHumanoidRagdoll( Rig &rig, Simulation &simulation, const Skeleton &ske
 		body.positionDrive.enabled = false;
 		body.positionDrive.stiffness = 0.0f;
 		body.positionDrive.damping = 0.0f;
+		body.positionDrive.horizontalShare = 1.0f;
+		body.gravityScale = 1.0f;
 		body.substepStartPosition = body.position;
 		body.substepStartOrientation = body.orientation;
 	}

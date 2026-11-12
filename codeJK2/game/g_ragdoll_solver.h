@@ -68,6 +68,9 @@ struct WorldPositionDrive
 	Vector3 targetPosition;
 	float stiffness;		// spring strength (force per unit of distance); size it for the whole ragdoll's weight
 	float damping;			// per second, slows the held body so it does not bounce around the target
+	float horizontalShare;	// 1 pulls (and damps) equally in every direction; smaller values act mostly up and
+							// down, so a body held at a height can still be shoved sideways (a standing
+							// character's hips, held up by the legs but free to stagger)
 };
 
 struct RigidBody
@@ -79,6 +82,9 @@ struct RigidBody
 
 	float inverseMass;
 	Matrix3 inverseInertiaLocal;	// inverse inertia tensor in body space
+	float gravityScale;				// share of gravity the body feels: 1 normally, 0 while a living character's
+									// muscles hold it up (gravity compensation, so the body reacts to hits but
+									// does not sag)
 
 	CollisionSphere spheres[MAXIMUM_SPHERES_PER_BODY];
 	int sphereCount;

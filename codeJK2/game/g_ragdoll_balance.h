@@ -25,13 +25,17 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // more. Balance comes back quickly: whatever was lost halves every half second. Depending on how
 // far off balance the character is:
 //
-//   * Slightly     - nothing here; the character only flinches (a hit reaction).
-//   * Off balance  - the character stumbles. It is carried a step or two in the direction of the
-//                    push while its legs walk that way and its upper body leans with the push. It
-//                    keeps aiming and fighting throughout, and more hits keep it stumbling.
-//   * Pushed over  - one huge hit, more hits while already stumbling, or stumbling off a ledge:
-//                    the character falls over into a knockdown (a ragdoll, see
-//                    G_Ragdoll_OnKnockdown) and gets back up afterwards.
+//   * Slightly     - nothing here; the character only reacts to the hit itself (see the shot
+//                    reactions in g_ragdoll.h).
+//   * Off balance  - the character staggers. This module only decides when and how hard: it leaves
+//                    a push (TakeStumblePush) that the physics adds to the body, says how far the
+//                    upper body leans with it and how hard the arms windmill (StumbleLean), and the
+//                    balance controller in g_ragdoll.cpp (StepToKeepBalance) steps the feet to catch
+//                    the body. More hits keep it staggering.
+//   * Pushed over  - one huge hit, more hits while already staggering, staggering off a ledge, or a
+//                    misstep (the body moving further than any step can catch, LoseFooting): the
+//                    character falls over into a knockdown (a ragdoll, see G_Ragdoll_OnKnockdown)
+//                    and gets back up afterwards.
 //
 // Only NPCs stumble; the player's own movement is never taken over. Bosses, characters that cannot
 // be knocked back, and characters busy with something special (rolling, flipping, saber locks,
@@ -73,10 +77,19 @@ void ForgetBalance( int entityNumber );
 //   push           how hard the hit pushes: damage times how hard that kind of damage pushes
 void LoseBalance( gentity_t *character, const vec3_t pushDirection, const vec3_t hitPoint, float push );
 
-// Called every drawn frame for every living character. Moves and animates a stumbling character.
-// When it returns BALANCE_FALLING the character has already been put into its knockdown
+// Called every drawn frame for every living character. Ends staggers that are over and carries out
+// falls. When it returns BALANCE_FALLING the character has already been put into its knockdown
 // animation, and the caller should turn the fall into a ragdoll.
 balanceOutcome_t UpdateBalance( gentity_t *character );
+
+// Called by the physics when a character's body is moving further than any step can catch (or is
+// about to step into a drop): it has misstepped. It falls over (toward fallDirection) on the next
+// drawn frame.
+void LoseFooting( int entityNumber, const Vector3 &fallDirection );
+
+// The speed a new stagger adds to the character's body (a horizontal velocity), once per hit.
+// Returns false when there is no push waiting.
+bool TakeStumblePush( int entityNumber, Vector3 &velocityChange );
 
 // While a character is stumbling: the horizontal direction its upper body should lean and by how
 // much (radians). Returns false when the character is not stumbling.

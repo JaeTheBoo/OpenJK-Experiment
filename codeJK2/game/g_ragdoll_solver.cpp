@@ -328,7 +328,7 @@ void Simulation::IntegrateBodies( float substepSeconds, const SimulationSettings
 
 		if ( body.inverseMass > 0.0f )
 		{
-			body.linearVelocity += settings.gravity * substepSeconds;
+			body.linearVelocity += settings.gravity * ( body.gravityScale * substepSeconds );
 		}
 		body.position += body.linearVelocity * substepSeconds;
 		RotateBody( body, body.angularVelocity * substepSeconds );
@@ -363,7 +363,9 @@ void Simulation::SolveWorldDrives( float substepSeconds )
 		if ( body.positionDrive.enabled && body.positionDrive.stiffness > 0.0f && body.inverseMass > 0.0f )
 		{
 			const float compliance = 1.0f / ( body.positionDrive.stiffness * substepSeconds * substepSeconds );
-			const Vector3 offset = body.positionDrive.targetPosition - body.position;
+			Vector3 offset = body.positionDrive.targetPosition - body.position;
+			offset.x *= body.positionDrive.horizontalShare;
+			offset.y *= body.positionDrive.horizontalShare;
 			body.position += offset * ( body.inverseMass / ( body.inverseMass + compliance ) );
 		}
 
@@ -646,7 +648,11 @@ void Simulation::ApplyBodyDampingAndLimits( float substepSeconds, const Simulati
 
 		if ( body.positionDrive.enabled )
 		{
-			body.linearVelocity *= 1.0f - Clamp( body.positionDrive.damping * substepSeconds, 0.0f, 1.0f );
+			const float verticalKeep = 1.0f - Clamp( body.positionDrive.damping * substepSeconds, 0.0f, 1.0f );
+			const float horizontalKeep = 1.0f - Clamp( body.positionDrive.damping * body.positionDrive.horizontalShare * substepSeconds, 0.0f, 1.0f );
+			body.linearVelocity.x *= horizontalKeep;
+			body.linearVelocity.y *= horizontalKeep;
+			body.linearVelocity.z *= verticalKeep;
 		}
 
 		// The world orientation drive is damped against the world, not against a parent.
