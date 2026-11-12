@@ -30,6 +30,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "g_functions.h"
 #include "anims.h"
 #include "objectives.h"
+#include "g_ragdoll.h"
 #include "../cgame/cg_local.h"
 #include "g_icarus.h"
 #include "wp_saber.h"
@@ -4129,6 +4130,9 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 	//need to update STAT_HEALTH here because ClientThink_real for self may happen before STAT_HEALTH is updated from self->health and pmove will stomp death anim with a move anim
 	self->client->ps.stats[STAT_HEALTH] = self->health;
 
+	// Hand the body to the physics; the ragdoll starts the next time the character is drawn.
+	G_Ragdoll_OnDeath( self, meansOfDeath, hitLoc );
+
 	if ( self->NPC )
 	{//If an NPC, make sure we start running our scripts again- this gets set to infinite while we fall to our deaths
 		self->NPC->nextBStateThink = level.time;
@@ -4798,6 +4802,9 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 	if (!targ->takedamage) {
 		return;
 	}
+
+	// Remember the hit so a death ragdoll can react to it (and push existing ragdolls).
+	G_Ragdoll_RecordDamage( targ, dir, point, damage, mod );
 
 	if ( targ->health <= 0 && !targ->client )
 	{	// allow corpses to be disintegrated

@@ -28,6 +28,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "bg_local.h"
 #include "g_functions.h"
 #include "wp_saber.h"
+#include "g_ragdoll.h"
 #include "../../code/qcommon/tri_coll_test.h"
 
 #define MAX_SABER_VICTIMS 16
@@ -5567,6 +5568,8 @@ void WP_ForceKnockdown( gentity_t *self, gentity_t *pusher, qboolean pull, qbool
 				self->client->ps.legsAnimTimer += addTime;
 				self->client->ps.torsoAnimTimer += addTime;
 			}
+			// Knocked-down NPCs fall as ragdolls and get back up afterwards.
+			G_Ragdoll_OnForceKnockdown( self );
 			//
 			if ( pusher->NPC && pusher->enemy == self )
 			{//pushed pushed down his enemy
@@ -5720,6 +5723,9 @@ void ForceThrow( gentity_t *self, qboolean pull )
 	{
 		cone = forcePushCone[self->client->ps.forcePowerLevel[FP_PUSH]];
 	}
+
+	// Ragdoll corpses in front of us are flung (or yanked toward us) by the physics.
+	G_Ragdoll_ForceThrow( self, pull, self->client->ps.forcePowerLevel[pull ? FP_PULL : FP_PUSH], (float)radius, cone );
 
 	if ( cone >= 1.0f )
 	{//must be pointing right at them
@@ -6900,6 +6906,20 @@ void ForceGrip( gentity_t *self )
 		return;
 	}
 
+	if ( G_Ragdoll_IsGrippingRagdoll( self ) )
+	{//already holding up a ragdoll corpse: keep holding it, exactly as with a living target above
+		if ( self->client->ps.forcePowerLevel[FP_GRIP] > FORCE_LEVEL_1 )
+		{
+			self->client->ps.forcePowerDuration[FP_GRIP] = level.time + 100;
+			self->client->ps.weaponTime = 1000;
+			if ( self->client->ps.forcePowersActive&(1<<FP_SPEED) )
+			{
+				self->client->ps.weaponTime = floor( self->client->ps.weaponTime * g_timescale->value );
+			}
+		}
+		return;
+	}
+
 	if ( !WP_ForcePowerUsable( self, FP_GRIP, 0 ) )
 	{//can't use it right now
 		return;
@@ -6948,15 +6968,34 @@ void ForceGrip( gentity_t *self )
 	if ( !traceEnt )
 	{//okay, trace straight ahead and see what's there
 		gi.trace( &tr, self->client->renderInfo.handLPoint, vec3_origin, vec3_origin, end, self->s.number, MASK_SHOT, G2_NOCOLLIDE, 0 );
-		if ( tr.entityNum >= ENTITYNUM_WORLD || tr.fraction == 1.0 || tr.allsolid || tr.startsolid )
+		if ( tr.entityNum < ENTITYNUM_WORLD && tr.fraction < 1.0 && !tr.allsolid && !tr.startsolid )
 		{
-			return;
+			traceEnt = &g_entities[tr.entityNum];
 		}
-
-		traceEnt = &g_entities[tr.entityNum];
 	}
 
-	if ( !traceEnt || traceEnt == self/*???*/ || traceEnt->bmodel || (traceEnt->health <= 0 && traceEnt->takedamage) || (traceEnt->NPC && traceEnt->NPC->scriptFlags & SCF_NO_FORCE) )
+	if ( !traceEnt || (traceEnt->health <= 0 && traceEnt->takedamage) )
+	{//nothing alive to grip: lift a ragdoll corpse instead, if we are aiming at one
+		if ( G_Ragdoll_ForceGripStart( self, FORCE_GRIP_DIST ) )
+		{
+			// The physics holds the body; the power itself runs exactly as it would on a living
+			// target (same cost and duration), just without a gripped entity.
+			WP_ForcePowerStart( self, FP_GRIP, 20 );
+			if ( self->client->ps.forcePowerLevel[FP_GRIP] < FORCE_LEVEL_2 )
+			{
+				self->client->ps.forcePowerDebounce[FP_GRIP] = level.time + 250;
+				self->client->ps.forcePowerDuration[FP_GRIP] = level.time + 5000;
+			}
+			else
+			{
+				self->client->ps.forcePowerDebounce[FP_GRIP] = level.time + 1000;
+			}
+			self->s.loopSound = G_SoundIndex( "sound/weapons/force/grip.mp3" );
+		}
+		return;
+	}
+
+	if ( traceEnt == self/*???*/ || traceEnt->bmodel || (traceEnt->health <= 0 && traceEnt->takedamage) || (traceEnt->NPC && traceEnt->NPC->scriptFlags & SCF_NO_FORCE) )
 	{
 		return;
 	}
@@ -7254,6 +7293,9 @@ void ForceShootLightning( gentity_t *self )
 
 	AngleVectors( self->client->ps.viewangles, forward, NULL, NULL );
 	VectorNormalize( forward );
+
+	// Ragdoll corpses in reach convulse (the code below skips corpses at the highest level).
+	G_Ragdoll_ForceLightning( self, self->client->ps.forcePowerLevel[FP_LIGHTNING] );
 
 	//FIXME: if lightning hits water, do water-only-flagged radius damage from that point
 	if ( self->client->ps.forcePowerLevel[FP_LIGHTNING] > FORCE_LEVEL_2 )

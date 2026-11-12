@@ -29,6 +29,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "g_functions.h"
 #include "g_nav.h"
 #include "g_icarus.h"
+#include "g_ragdoll.h"
 #include "b_local.h"
 #include "anims.h"
 #include "../../code/rd-common/mdx_format.h"
@@ -817,6 +818,8 @@ Marks the entity as free
 =================
 */
 void G_FreeEntity( gentity_t *ed ) {
+	G_Ragdoll_OnEntityFreed( ed );	// stop simulating this body before its model is destroyed
+
 	gi.unlinkentity (ed);		// unlink from world
 
 	ICARUS_FreeEnt( ed );

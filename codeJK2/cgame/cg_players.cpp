@@ -28,6 +28,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "cg_media.h"
 #include "FxScheduler.h"
 #include "../game/ghoul2_shared.h"
+#include "../game/g_ragdoll.h"
 #include "../game/anims.h"
 #include "../game/wp_saber.h"
 
@@ -5069,6 +5070,13 @@ Ghoul2 Insert Start
 				ent.origin[2] += 24 * (ent.modelScale[2] - 1);
 			}
 			VectorCopy( ent.origin, ent.oldorigin);
+			VectorCopy( ent.origin, ent.lightingOrigin );
+		}
+
+		// A dead character may be a ragdoll: the physics then supplies the pose, position and facing.
+		if ( G_Ragdoll_UpdateAndPose( cent->gent, cg.time, ent.origin, ent.axis, tempAngles ) )
+		{
+			VectorCopy( ent.origin, ent.oldorigin );
 			VectorCopy( ent.origin, ent.lightingOrigin );
 		}
 
