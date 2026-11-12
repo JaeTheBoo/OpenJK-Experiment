@@ -34,6 +34,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "g_icarus.h"
 #include "objectives.h"
 #include "g_ragdoll.h"
+#include "g_saber_guard.h"
 #include "../cgame/cg_local.h"	// yeah I know this is naughty, but we're shipping soon...
 #include "time.h"
 #include "../code/qcommon/ojk_saved_game_helper.h"
@@ -598,6 +599,7 @@ void G_InitCvars( void ) {
 	g_iscensored = gi.cvar( "ui_iscensored", "0", CVAR_ARCHIVE|CVAR_ROM|CVAR_INIT|CVAR_CHEAT|CVAR_NORESTART );
 
 	G_Ragdoll_RegisterCvars();	// death ragdolls, see g_ragdoll.h
+	G_SaberGuard_RegisterCvars();	// the player's lightsaber guard, see g_saber_guard.h
 }
 
 /*

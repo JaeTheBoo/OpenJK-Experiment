@@ -31,6 +31,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "anims.h"
 #include "objectives.h"
 #include "g_ragdoll.h"
+#include "g_slice.h"
 #include "../cgame/cg_local.h"
 #include "g_icarus.h"
 #include "wp_saber.h"
@@ -42,6 +43,7 @@ extern qboolean	stop_icarus;
 extern cvar_t	*g_dismemberment;
 extern cvar_t	*g_dismemberProbabilities;
 extern cvar_t	*g_saberRealisticCombat;
+extern cvar_t	*g_ragdollDebug;
 extern cvar_t		*g_timescale;
 extern cvar_t		*d_slowmodeath;
 extern gentity_t *player;
@@ -4607,8 +4609,30 @@ static int G_CheckForLedge( gentity_t *self, vec3_t fallCheckDir, float checkDis
 	return 0;
 }
 
-static void G_FriendlyFireReaction( gentity_t *self, gentity_t *other, int dflags )
+/*
+==================
+G_IsReflectedMissile
+
+True for a blaster bolt (or other missile) knocked back with a lightsaber. G_ReflectMissile hands it
+to whoever reflected it, keeping its first owner in lastEnemy: its hits still count as the
+reflector's, but an ally it strikes takes it as an accident, not as being attacked.
+==================
+*/
+qboolean G_IsReflectedMissile( const gentity_t *inflictor )
 {
+	return ( inflictor && inflictor->s.eType == ET_MISSILE && inflictor->lastEnemy && inflictor->lastEnemy != inflictor->owner ) ? qtrue : qfalse;
+}
+
+static void G_FriendlyFireReaction( gentity_t *self, gentity_t *inflictor, gentity_t *other, int dflags )
+{
+	if ( G_IsReflectedMissile( inflictor ) )
+	{//a bolt knocked back with a saber: an accident, nothing to get angry about
+		if ( g_ragdollDebug && g_ragdollDebug->integer )
+		{
+			gi.Printf( "friendly fire: %d was hit by a reflected bolt, taken as an accident\n", self->s.number );
+		}
+		return;
+	}
 	if ( (!player->client->ps.viewEntity || other->s.number != player->client->ps.viewEntity))
 	{//hit by a teammate
 		if ( other != self->enemy && self != other->enemy )
@@ -5015,7 +5039,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 			&& targ->client->playerTeam == attacker->client->playerTeam
 			&& (!targ->NPC || !targ->NPC->charmedTime) )
 		{//complain, but don't turn on them
-			G_FriendlyFireReaction( targ, attacker, dflags );
+			G_FriendlyFireReaction( targ, inflictor, attacker, dflags );
 		}
 		return;
 	}
@@ -5289,7 +5313,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 				{
 					if ( !targ->NPC || !targ->NPC->charmedTime )
 					{
-						G_FriendlyFireReaction( targ, attacker, dflags );
+						G_FriendlyFireReaction( targ, inflictor, attacker, dflags );
 					}
 				}
 			}
@@ -5376,10 +5400,18 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 			{//just killed and didn't have an enemy before
 				targ->enemy = attacker;
 			}
+			if ( mod == MOD_SABER && G_Slice_SaberKill( targ, attacker, point ) )
+			{//cut along the blade's swing instead of the game's own dismemberment (see g_slice.h)
+				dflags &= ~DAMAGE_DISMEMBER;
+			}
 			GEntity_DieFunc( targ, inflictor, attacker, take, mod, dflags, hitLoc );
 		}
 		else
 		{
+			if ( mod == MOD_SABER && ( dflags & DAMAGE_DISMEMBER ) )
+			{//a blow that cuts clean through an arm takes it off, and the character lives on (see g_slice.h)
+				G_Slice_SaberWound( targ, attacker, point, take, hitLoc );
+			}
 			GEntity_PainFunc( targ, inflictor, attacker, point, take, mod, hitLoc );
 			if ( targ->s.number == 0 )
 			{//player run painscript

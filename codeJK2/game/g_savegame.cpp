@@ -32,6 +32,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "objectives.h"
 #include "../cgame/cg_camera.h"
 #include "g_icarus.h"
+#include "g_slice.h"
 #include "../../code/qcommon/sstring.h"
 #include "../code/qcommon/ojk_saved_game_helper.h"
 
@@ -1004,7 +1005,9 @@ void WriteLevel(qboolean qbAutosave)
 
 	/////////////
 	WriteGEntities(qbAutosave);
+	G_Slice_WriteSaveGame();	// characters maimed by lightsabers travel as a script variable
 	Q3_VariableSave();
+	G_Slice_FinishWriteSaveGame();
 	G_LoadSave_WriteMiscData();
 
 	extern void CG_WriteTheEvilCGHackStuff(void);
@@ -1071,6 +1074,7 @@ void ReadLevel(qboolean qbAutosave, qboolean qbLoadTransition)
 
 	ReadGEntities(qbAutosave);
 	Q3_VariableLoad();
+	G_Slice_ReadSaveGame();		// characters maimed by lightsabers (see g_slice.h)
 	G_LoadSave_ReadMiscData();
 
 	extern void CG_ReadTheEvilCGHackStuff(void);

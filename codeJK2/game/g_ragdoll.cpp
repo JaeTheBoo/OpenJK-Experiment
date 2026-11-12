@@ -526,6 +526,7 @@ void G_Ragdoll_RegisterCvars( void )
 	g_ragdollHitReactionScale = gi.cvar( "g_ragdollHitReactionScale", "0.4", CVAR_ARCHIVE );
 	g_ragdollShotReactions	= gi.cvar( "g_ragdollShotReactions", "1", CVAR_ARCHIVE );
 	ragdoll::RegisterBalanceCvars();	// g_ragdollStumbles, g_ragdollBalance
+	G_Slice_RegisterCvars();			// g_saberSlicing
 }
 
 void G_Ragdoll_Reset( void )
@@ -614,6 +615,13 @@ static RagdollInstance *AllocateInstance( void )
 	return oldestSleeping;
 }
 
+// A failed mission only pretends the player died (G_PlayerGuiltDeath): health 0 and the "what have I
+// done?!" kneel, held until the game is restarted. No ragdoll takes the player then.
+static bool IsPlayerKneelingAfterFailedMission( gentity_t *entity )
+{
+	return entity->s.number == 0 && entity->client && entity->health <= 0 && entity->client->ps.legsAnim == BOTH_FORCEHEAL_START;
+}
+
 // True for a dead character with the standard humanoid skeleton that can be simulated.
 static bool IsHumanoidCorpse( gentity_t *entity )
 {
@@ -621,7 +629,7 @@ static bool IsHumanoidCorpse( gentity_t *entity )
 	{
 		return false;
 	}
-	if ( entity->health > 0 || entity->client->ps.pm_type != PM_DEAD )
+	if ( entity->health > 0 || entity->client->ps.pm_type != PM_DEAD || IsPlayerKneelingAfterFailedMission( entity ) )
 	{
 		return false;
 	}
@@ -3887,6 +3895,16 @@ qboolean G_Ragdoll_UpdateAndPose( gentity_t *entity, int renderTime, vec3_t rend
 	}
 
 	RagdollInstance *instance = FindInstance( entityNumber );
+
+	// The mission failed: the player kneels as the game animates it, even out of a hit reaction.
+	if ( IsPlayerKneelingAfterFailedMission( entity ) )
+	{
+		if ( instance )
+		{
+			ReleaseInstance( *instance, true );
+		}
+		return qfalse;
+	}
 
 	// A living character with no ragdoll: the common case, unless it was just knocked down or hit.
 	if ( !instance && entity->health > 0 )

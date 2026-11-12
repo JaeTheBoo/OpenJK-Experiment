@@ -30,6 +30,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "wp_saber.h"
 #include "g_icarus.h"
 #include "g_ragdoll.h"
+#include "g_saber_guard.h"
 
 #ifdef _DEBUG
 	#include <float.h>
@@ -2655,6 +2656,10 @@ extern cvar_t	*g_skippingcin;
 
 	G_CheckClampUcmd( ent, ucmd );
 
+	// The player's lightsaber guard (see g_saber_guard.h): with the saber, alt-attack guards and the
+	// throw button throws, and the guard's aim follows the view.
+	G_SaberGuard_ReadCommand( ent, ucmd );
+
 	if ( (ucmd->buttons&BUTTON_BLOCKING) && !g_saberAutoBlocking->integer )
 	{//blocking with saber
 		ent->client->ps.saberBlockingTime = level.time + FRAMETIME;
@@ -2778,6 +2783,9 @@ extern cvar_t	*g_skippingcin;
 
 	// perform a pmove
 	Pmove( &pm );
+
+	// Hold the saber in the guard's parry while the player guards (see g_saber_guard.h).
+	G_SaberGuard_UpdatePose( ent );
 
 	// save results of pmove
 	if ( ent->client->ps.eventSequence != oldEventSequence )

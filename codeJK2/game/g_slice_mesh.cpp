@@ -26,6 +26,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "g_ragdoll_rig.h"
 #include "../../code/rd-common/mdx_format.h"
 
+#include <algorithm>
 #include <ctype.h>
 #include <map>
 #include <math.h>
@@ -294,8 +295,54 @@ int PosedMesh::ShaderSlot( const std::string &shaderName )
 	return (int)shaderNames.size() - 1;
 }
 
+void MakeRestMesh( const PosedMesh &restPosed, CharacterMesh &mesh )
+{
+	mesh.surfaces.clear();
+	std::vector<int> copiedIndex( restPosed.vertices.size() );
+	for ( size_t shaderSlot = 0; shaderSlot < restPosed.shaderNames.size(); shaderSlot++ )
+	{
+		MeshSurface surface;
+		surface.name = "cut " + restPosed.shaderNames[shaderSlot];
+		surface.shaderName = restPosed.shaderNames[shaderSlot];
+		std::fill( copiedIndex.begin(), copiedIndex.end(), -1 );
+		for ( size_t triangle = 0; triangle < restPosed.triangleShaders.size(); triangle++ )
+		{
+			if ( restPosed.triangleShaders[triangle] != (int)shaderSlot )
+			{
+				continue;
+			}
+			for ( int corner = 0; corner < 3; corner++ )
+			{
+				const int source = restPosed.indexes[triangle * 3 + corner];
+				if ( copiedIndex[source] < 0 )
+				{
+					const PosedVertex &posedVertex = restPosed.vertices[source];
+					BindVertex vertex;
+					vertex.position = posedVertex.position;
+					vertex.normal = posedVertex.normal;
+					vertex.s = posedVertex.s;
+					vertex.t = posedVertex.t;
+					vertex.boneCount = posedVertex.boneCount;
+					for ( int weightIndex = 0; weightIndex < 4; weightIndex++ )
+					{
+						vertex.bones[weightIndex] = posedVertex.bones[weightIndex];
+						vertex.weights[weightIndex] = posedVertex.weights[weightIndex];
+					}
+					copiedIndex[source] = (int)surface.vertices.size();
+					surface.vertices.push_back( vertex );
+				}
+				surface.indexes.push_back( copiedIndex[source] );
+			}
+		}
+		if ( !surface.indexes.empty() )
+		{
+			mesh.surfaces.push_back( surface );
+		}
+	}
+}
+
 void PoseCharacterMesh( const CharacterMesh &mesh, const ragdoll::Skeleton &skeleton, const Transform *boneFrames,
-						const Transform &modelToWorld, float modelScale, PosedMesh &posed )
+						const Transform &modelToWorld, float modelScale, PosedMesh &posed, const std::vector<bool> *surfaceIsShown )
 {
 	posed.Clear();
 
@@ -308,6 +355,10 @@ void PoseCharacterMesh( const CharacterMesh &mesh, const ragdoll::Skeleton &skel
 
 	for ( size_t surfaceIndex = 0; surfaceIndex < mesh.surfaces.size(); surfaceIndex++ )
 	{
+		if ( surfaceIsShown && surfaceIndex < surfaceIsShown->size() && !( *surfaceIsShown )[surfaceIndex] )
+		{
+			continue;
+		}
 		const MeshSurface &surface = mesh.surfaces[surfaceIndex];
 		const int shaderSlot = posed.ShaderSlot( surface.shaderName );
 		const int firstVertex = (int)posed.vertices.size();
@@ -341,6 +392,12 @@ void PoseCharacterMesh( const CharacterMesh &mesh, const ragdoll::Skeleton &skel
 			placed.normal = ragdoll::Normalized( ragdoll::Rotate( modelToWorld.rotation, normal ) );
 			placed.s = vertex.s;
 			placed.t = vertex.t;
+			placed.boneCount = vertex.boneCount;
+			for ( int weightIndex = 0; weightIndex < vertex.boneCount; weightIndex++ )
+			{
+				placed.bones[weightIndex] = vertex.bones[weightIndex];
+				placed.weights[weightIndex] = vertex.weights[weightIndex];
+			}
 			posed.vertices.push_back( placed );
 		}
 
@@ -363,13 +420,13 @@ Cutting
 namespace
 {
 
-// Builds one side of a cut mesh. The original vertices it uses are copied over once each; the
+// Builds one part of a divided mesh. The original vertices it uses are copied over once each; the
 // points where the cut crosses an edge are added as new vertices.
-class SideBuilder
+class PartBuilder
 {
 public:
-	SideBuilder( const PosedMesh &source, PosedMesh &output )
-		: source( source ), output( output ), copiedIndex( source.vertices.size(), -1 )
+	PartBuilder( const PosedMesh *source, PosedMesh *output )
+		: source( source ), output( output ), copiedIndex( source->vertices.size(), -1 )
 	{
 	}
 
@@ -377,47 +434,55 @@ public:
 	{
 		if ( copiedIndex[sourceIndex] < 0 )
 		{
-			copiedIndex[sourceIndex] = (int)output.vertices.size();
-			output.vertices.push_back( source.vertices[sourceIndex] );
+			copiedIndex[sourceIndex] = (int)output->vertices.size();
+			output->vertices.push_back( source->vertices[sourceIndex] );
 		}
 		return copiedIndex[sourceIndex];
 	}
 
 	int New( const PosedVertex &vertex )
 	{
-		output.vertices.push_back( vertex );
-		return (int)output.vertices.size() - 1;
+		output->vertices.push_back( vertex );
+		return (int)output->vertices.size() - 1;
 	}
 
 	// Adds a convex polygon, given in the original triangle's winding, as a fan of triangles.
 	void Polygon( const int *corners, int cornerCount, int sourceShaderSlot )
 	{
-		const int shaderSlot = output.ShaderSlot( source.shaderNames[sourceShaderSlot] );
+		const int shaderSlot = output->ShaderSlot( source->shaderNames[sourceShaderSlot] );
 		for ( int corner = 1; corner + 1 < cornerCount; corner++ )
 		{
-			output.indexes.push_back( corners[0] );
-			output.indexes.push_back( corners[corner] );
-			output.indexes.push_back( corners[corner + 1] );
-			output.triangleShaders.push_back( shaderSlot );
+			output->indexes.push_back( corners[0] );
+			output->indexes.push_back( corners[corner] );
+			output->indexes.push_back( corners[corner + 1] );
+			output->triangleShaders.push_back( shaderSlot );
 		}
 	}
 
+	// Adds one of the source mesh's triangles unchanged.
+	void WholeTriangle( const int *sourceCorners, int sourceShaderSlot )
+	{
+		const int copied[3] = { Original( sourceCorners[0] ), Original( sourceCorners[1] ), Original( sourceCorners[2] ) };
+		Polygon( copied, 3, sourceShaderSlot );
+	}
+
 private:
-	const PosedMesh &source;
-	PosedMesh &output;
+	const PosedMesh *source;
+	PosedMesh *output;
 	std::vector<int> copiedIndex;
 };
 
 // A piece of the cut's outline: where it crosses one triangle.
 struct CutSegment
 {
-	Vector3 start;
-	Vector3 end;
+	PosedVertex start;
+	PosedVertex end;
 };
 
+// A point part of the way along an edge. It is moved by the bones of whichever end it is nearer.
 PosedVertex Interpolated( const PosedVertex &from, const PosedVertex &to, float fraction )
 {
-	PosedVertex vertex;
+	PosedVertex vertex = ( fraction < 0.5f ) ? from : to;
 	vertex.position = from.position + ( to.position - from.position ) * fraction;
 	vertex.normal = ragdoll::Normalized( from.normal + ( to.normal - from.normal ) * fraction );
 	vertex.s = from.s + ( to.s - from.s ) * fraction;
@@ -439,13 +504,13 @@ long long PointKey( const Vector3 &point )
 
 // Joins the cut's segments into outlines. Segments that meet end to end form an outline; an outline
 // that does not close up (the mesh has a gap there) is closed by its first and last points.
-void TraceOutlines( const std::vector<CutSegment> &segments, std::vector< std::vector<Vector3> > &outlines )
+void TraceOutlines( const std::vector<CutSegment> &segments, std::vector< std::vector<PosedVertex> > &outlines )
 {
 	std::multimap<long long, int> segmentsAtPoint;
 	for ( size_t segmentIndex = 0; segmentIndex < segments.size(); segmentIndex++ )
 	{
-		segmentsAtPoint.insert( std::make_pair( PointKey( segments[segmentIndex].start ), (int)segmentIndex ) );
-		segmentsAtPoint.insert( std::make_pair( PointKey( segments[segmentIndex].end ), (int)segmentIndex ) );
+		segmentsAtPoint.insert( std::make_pair( PointKey( segments[segmentIndex].start.position ), (int)segmentIndex ) );
+		segmentsAtPoint.insert( std::make_pair( PointKey( segments[segmentIndex].end.position ), (int)segmentIndex ) );
 	}
 
 	std::vector<bool> used( segments.size(), false );
@@ -456,15 +521,15 @@ void TraceOutlines( const std::vector<CutSegment> &segments, std::vector< std::v
 			continue;
 		}
 		used[firstSegment] = true;
-		std::vector<Vector3> outline;
+		std::vector<PosedVertex> outline;
 		outline.push_back( segments[firstSegment].start );
 		outline.push_back( segments[firstSegment].end );
-		const long long startKey = PointKey( segments[firstSegment].start );
-		Vector3 current = segments[firstSegment].end;
+		const long long startKey = PointKey( segments[firstSegment].start.position );
+		PosedVertex current = segments[firstSegment].end;
 
 		for ( ;; )
 		{
-			const long long currentKey = PointKey( current );
+			const long long currentKey = PointKey( current.position );
 			if ( currentKey == startKey )
 			{
 				outline.pop_back();		// back where it started: the last point repeats the first
@@ -487,7 +552,7 @@ void TraceOutlines( const std::vector<CutSegment> &segments, std::vector< std::v
 			}
 			used[nextSegment] = true;
 			const CutSegment &segment = segments[nextSegment];
-			current = ( PointKey( segment.start ) == currentKey ) ? segment.end : segment.start;
+			current = ( PointKey( segment.start.position ) == currentKey ) ? segment.end : segment.start;
 			outline.push_back( current );
 		}
 
@@ -578,18 +643,17 @@ void TriangulateOutline( const std::vector<float> &x, const std::vector<float> &
 
 // Adds the cap closing one cut face to a side. The triangles are added both ways round, so the cap
 // shows whichever way the renderer culls; the normals point out of the piece.
-void AddCap( PosedMesh &side, const std::vector<Vector3> &outline, const std::vector<int> &triangles, const Vector3 &outward,
+void AddCap( PosedMesh &side, const std::vector<PosedVertex> &outline, const std::vector<int> &triangles, const Vector3 &outward,
 			 const Vector3 &planePoint, const Vector3 &axisU, const Vector3 &axisV, const std::string &capShaderName )
 {
 	const int shaderSlot = side.ShaderSlot( capShaderName );
 	const int firstVertex = (int)side.vertices.size();
 	for ( size_t point = 0; point < outline.size(); point++ )
 	{
-		PosedVertex vertex;
-		vertex.position = outline[point];
+		PosedVertex vertex = outline[point];	// keeps the bones that move it
 		vertex.normal = outward;
-		vertex.s = ragdoll::Dot( outline[point] - planePoint, axisU ) / CAP_TEXTURE_SIZE;
-		vertex.t = ragdoll::Dot( outline[point] - planePoint, axisV ) / CAP_TEXTURE_SIZE;
+		vertex.s = ragdoll::Dot( vertex.position - planePoint, axisU ) / CAP_TEXTURE_SIZE;
+		vertex.t = ragdoll::Dot( vertex.position - planePoint, axisV ) / CAP_TEXTURE_SIZE;
 		side.vertices.push_back( vertex );
 	}
 	for ( size_t index = 0; index + 2 < triangles.size(); index += 3 )
@@ -607,67 +671,79 @@ void AddCap( PosedMesh &side, const std::vector<Vector3> &outline, const std::ve
 
 } // namespace
 
-bool SliceMesh( const PosedMesh &mesh, const Vector3 &planePoint, const Vector3 &planeNormal,
-				const std::string &capShaderName, PosedMesh &front, PosedMesh &back )
+void SplitMesh( const PosedMesh &mesh, const std::vector<int> &vertexParts, int partCount, const Vector3 &planePoint,
+				const Vector3 &planeNormal, const std::string &capShaderName, std::vector<PosedMesh> &parts )
 {
-	front.Clear();
-	back.Clear();
+	parts.assign( partCount > 0 ? partCount : 0, PosedMesh() );
+	if ( partCount <= 0 || vertexParts.size() != mesh.vertices.size() )
+	{
+		return;
+	}
 
 	const int vertexCount = (int)mesh.vertices.size();
 	std::vector<float> distance( vertexCount );
-	bool anyInFront = false;
-	bool anyBehind = false;
 	for ( int vertex = 0; vertex < vertexCount; vertex++ )
 	{
 		distance[vertex] = ragdoll::Dot( mesh.vertices[vertex].position - planePoint, planeNormal );
-		if ( distance[vertex] >= 0.0f )
-		{
-			anyInFront = true;
-		}
-		else
-		{
-			anyBehind = true;
-		}
 	}
-	if ( !anyInFront || !anyBehind )
+	std::vector<PartBuilder> builders;
+	builders.reserve( partCount );
+	for ( int part = 0; part < partCount; part++ )
 	{
-		return false;
+		builders.push_back( PartBuilder( &mesh, &parts[part] ) );
 	}
-
-	SideBuilder frontSide( mesh, front );
-	SideBuilder backSide( mesh, back );
 
 	// Where the cut crosses each edge, worked out once per edge (from its lower-numbered end), so the
 	// triangles on both sides of an edge agree exactly on the point.
 	std::map<long long, PosedVertex> crossingOfEdge;
-	std::vector<CutSegment> segments;
+	// The cut's segments, kept apart for every pair of parts they divide (front part, back part).
+	std::map< std::pair<int, int>, std::vector<CutSegment> > segmentsBetweenParts;
 
 	for ( size_t index = 0; index + 2 < mesh.indexes.size(); index += 3 )
 	{
 		const int corners[3] = { mesh.indexes[index], mesh.indexes[index + 1], mesh.indexes[index + 2] };
 		const int shaderSlot = mesh.triangleShaders[index / 3];
+		const int cornerParts[3] = { vertexParts[corners[0]], vertexParts[corners[1]], vertexParts[corners[2]] };
+		if ( cornerParts[0] == cornerParts[1] && cornerParts[1] == cornerParts[2] )
+		{
+			builders[cornerParts[0]].WholeTriangle( corners, shaderSlot );
+			continue;
+		}
+
+		// Does the plane divide this triangle between two parts?
 		const bool inFront[3] = { distance[corners[0]] >= 0.0f, distance[corners[1]] >= 0.0f, distance[corners[2]] >= 0.0f };
-
-		if ( inFront[0] && inFront[1] && inFront[2] )
+		int frontPart = -1;
+		int backPart = -1;
+		bool dividedByPlane = true;
+		for ( int corner = 0; corner < 3; corner++ )
 		{
-			const int copied[3] = { frontSide.Original( corners[0] ), frontSide.Original( corners[1] ), frontSide.Original( corners[2] ) };
-			frontSide.Polygon( copied, 3, shaderSlot );
+			int &sidePart = inFront[corner] ? frontPart : backPart;
+			if ( sidePart < 0 )
+			{
+				sidePart = cornerParts[corner];
+			}
+			else if ( sidePart != cornerParts[corner] )
+			{
+				dividedByPlane = false;
+			}
+		}
+		if ( !dividedByPlane || frontPart < 0 || backPart < 0 || frontPart == backPart )
+		{
+			// Goes whole to the part most of its corners belong to.
+			const int majorityPart = ( cornerParts[1] == cornerParts[2] ) ? cornerParts[1] : cornerParts[0];
+			builders[majorityPart].WholeTriangle( corners, shaderSlot );
 			continue;
 		}
-		if ( !inFront[0] && !inFront[1] && !inFront[2] )
-		{
-			const int copied[3] = { backSide.Original( corners[0] ), backSide.Original( corners[1] ), backSide.Original( corners[2] ) };
-			backSide.Polygon( copied, 3, shaderSlot );
-			continue;
-		}
 
-		// The triangle crosses the plane: walk around it, keeping each corner on its own side and
-		// adding the crossing point of every edge that changes side to both.
+		// Cut it: walk around it, keeping each corner in its own part and adding the crossing point
+		// of every edge that changes side to both.
+		PartBuilder &frontBuilder = builders[frontPart];
+		PartBuilder &backBuilder = builders[backPart];
 		int frontCorners[4];
 		int backCorners[4];
 		int frontCount = 0;
 		int backCount = 0;
-		Vector3 crossings[2];
+		PosedVertex crossings[2];
 		int crossingCount = 0;
 		for ( int edge = 0; edge < 3; edge++ )
 		{
@@ -675,11 +751,11 @@ bool SliceMesh( const PosedMesh &mesh, const Vector3 &planePoint, const Vector3 
 			const int to = corners[( edge + 1 ) % 3];
 			if ( inFront[edge] )
 			{
-				frontCorners[frontCount++] = frontSide.Original( from );
+				frontCorners[frontCount++] = frontBuilder.Original( from );
 			}
 			else
 			{
-				backCorners[backCount++] = backSide.Original( from );
+				backCorners[backCount++] = backBuilder.Original( from );
 			}
 			if ( inFront[edge] == inFront[( edge + 1 ) % 3] )
 			{
@@ -695,47 +771,51 @@ bool SliceMesh( const PosedMesh &mesh, const Vector3 &planePoint, const Vector3 
 				const float fraction = distance[lower] / ( distance[lower] - distance[higher] );
 				known = crossingOfEdge.insert( std::make_pair( edgeKey, Interpolated( mesh.vertices[lower], mesh.vertices[higher], fraction ) ) ).first;
 			}
-			frontCorners[frontCount++] = frontSide.New( known->second );
-			backCorners[backCount++] = backSide.New( known->second );
+			frontCorners[frontCount++] = frontBuilder.New( known->second );
+			backCorners[backCount++] = backBuilder.New( known->second );
 			if ( crossingCount < 2 )
 			{
-				crossings[crossingCount++] = known->second.position;
+				crossings[crossingCount++] = known->second;
 			}
 		}
-		frontSide.Polygon( frontCorners, frontCount, shaderSlot );
-		backSide.Polygon( backCorners, backCount, shaderSlot );
+		frontBuilder.Polygon( frontCorners, frontCount, shaderSlot );
+		backBuilder.Polygon( backCorners, backCount, shaderSlot );
 		if ( crossingCount == 2 )
 		{
 			CutSegment segment = { crossings[0], crossings[1] };
-			segments.push_back( segment );
+			segmentsBetweenParts[std::make_pair( frontPart, backPart )].push_back( segment );
 		}
 	}
 
 	// Close the cut faces. Each outline is flattened onto the plane, split into triangles and added
-	// to both pieces, facing out of each.
-	if ( !capShaderName.empty() && !segments.empty() )
+	// to the two parts it divides, facing out of each.
+	if ( capShaderName.empty() )
 	{
-		const Vector3 axisU = ragdoll::Normalized( ragdoll::AnyPerpendicular( planeNormal ) );
-		const Vector3 axisV = ragdoll::Cross( planeNormal, axisU );
-		std::vector< std::vector<Vector3> > outlines;
-		TraceOutlines( segments, outlines );
+		return;
+	}
+	const Vector3 axisU = ragdoll::Normalized( ragdoll::AnyPerpendicular( planeNormal ) );
+	const Vector3 axisV = ragdoll::Cross( planeNormal, axisU );
+	for ( std::map< std::pair<int, int>, std::vector<CutSegment> >::const_iterator between = segmentsBetweenParts.begin();
+		  between != segmentsBetweenParts.end(); ++between )
+	{
+		std::vector< std::vector<PosedVertex> > outlines;
+		TraceOutlines( between->second, outlines );
 		for ( size_t outlineIndex = 0; outlineIndex < outlines.size(); outlineIndex++ )
 		{
-			const std::vector<Vector3> &outline = outlines[outlineIndex];
+			const std::vector<PosedVertex> &outline = outlines[outlineIndex];
 			std::vector<float> x( outline.size() );
 			std::vector<float> y( outline.size() );
 			for ( size_t point = 0; point < outline.size(); point++ )
 			{
-				x[point] = ragdoll::Dot( outline[point] - planePoint, axisU );
-				y[point] = ragdoll::Dot( outline[point] - planePoint, axisV );
+				x[point] = ragdoll::Dot( outline[point].position - planePoint, axisU );
+				y[point] = ragdoll::Dot( outline[point].position - planePoint, axisV );
 			}
 			std::vector<int> triangles;
 			TriangulateOutline( x, y, triangles );
-			AddCap( front, outline, triangles, planeNormal * -1.0f, planePoint, axisU, axisV, capShaderName );
-			AddCap( back, outline, triangles, planeNormal, planePoint, axisU, axisV, capShaderName );
+			AddCap( parts[between->first.first], outline, triangles, planeNormal * -1.0f, planePoint, axisU, axisV, capShaderName );
+			AddCap( parts[between->first.second], outline, triangles, planeNormal, planePoint, axisU, axisV, capShaderName );
 		}
 	}
-	return true;
 }
 
 } // namespace slicing

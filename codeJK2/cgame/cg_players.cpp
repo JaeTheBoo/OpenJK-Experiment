@@ -5135,6 +5135,10 @@ extern vmCvar_t	cg_thirdPersonAlpha;
 		// We want to be able to do cool full-body type effects
 		CG_AddRefEntityWithPowerups( &ent, cent->currentState.powerups, cent );
 
+		// A character that lost an arm to a lightsaber: Ghoul2 no longer draws its body, which is
+		// drawn here without the missing parts (see g_slice.h).
+		G_Slice_AddMaimedCharacter( cent->gent, ent.origin, ent.axis, ( ent.renderfx & RF_LIGHTING_ORIGIN ) ? ent.lightingOrigin : ent.origin, cg.time );
+
 		if ( cg_debugBB.integer)
 		{
 			CG_CreateBBRefEnts(&cent->currentState, ent.origin);
