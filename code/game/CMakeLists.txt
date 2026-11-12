@@ -142,6 +142,8 @@ set(SPGameGameFiles
 	"${SPDir}/game/bg_pangles.cpp"
 	"${SPDir}/game/bg_panimate.cpp"
 	"${SPDir}/game/bg_pmove.cpp"
+	"${SPDir}/game/bg_pmove_momentum.cpp"
+	"${SPDir}/game/bg_pmove_momentum.h"
 	"${SPDir}/game/bg_slidemove.cpp"
 	"${SPDir}/game/AnimalNPC.cpp"
 	"${SPDir}/game/bg_vehicleLoad.cpp"

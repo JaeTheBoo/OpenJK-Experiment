@@ -30,6 +30,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "b_local.h"
 #include "anims.h"
 #include "objectives.h"
+#include "bg_pmove_momentum.h"
 #include "../cgame/cg_local.h"	// yeah I know this is naughty, but we're shipping soon...
 
 //rww - RAGDOLL_BEGIN
@@ -627,6 +628,7 @@ void G_InitCvars( void ) {
 	g_speed = gi.cvar( "g_speed", "250", CVAR_CHEAT );
 	g_gravity = gi.cvar( "g_gravity", "800", CVAR_SAVEGAME|CVAR_ROM );
 	g_stepSlideFix = gi.cvar( "g_stepSlideFix", "1", CVAR_ARCHIVE );
+	PM_Momentum_RegisterCvars();	// momentum movement tuning, see bg_pmove_momentum.h
 	g_sex = gi.cvar ("sex", "f", CVAR_USERINFO | CVAR_ARCHIVE|CVAR_SAVEGAME|CVAR_NORESTART );
 	g_spskill = gi.cvar ("g_spskill", "0", CVAR_ARCHIVE | CVAR_SAVEGAME|CVAR_NORESTART);
 	g_knockback = gi.cvar( "g_knockback", "1000", CVAR_CHEAT );

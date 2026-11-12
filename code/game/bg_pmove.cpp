@@ -44,6 +44,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #include "wp_saber.h"
 #include "g_vehicles.h"
+#include "bg_pmove_momentum.h"
 #include <float.h>
 
 extern qboolean G_DoDismemberment( gentity_t *self, vec3_t point, int mod, int damage, int hitLoc, qboolean force = qfalse );
@@ -749,6 +750,83 @@ static void PM_Accelerate( vec3_t wishdir, float wishspeed, float accel )
 	for (i=0 ; i<3 ; i++) {
 		pm->ps->velocity[i] += accelspeed * wishdir[i];
 	}
+}
+
+/*
+==================
+PM_ShouldUseMomentumMovement
+
+Returns qtrue when the momentum ground movement from bg_pmove_momentum.cpp should replace
+PM_Friction and PM_Accelerate for this movement frame.
+
+It is only used for the player moving on foot over ordinary ground. Every situation that has
+its own movement rules, or that drives the character's movement itself and depends on the
+original timing (rolls, cartwheels, special saber attacks and so on), keeps the original code.
+==================
+*/
+static qboolean PM_ShouldUseMomentumMovement( void )
+{
+	if ( !g_momentumMovement->integer )
+	{
+		return qfalse;
+	}
+
+	// Only the player, or an NPC the player is directly controlling. NPC AI is tuned for the
+	// original movement and is left alone.
+	if ( pm->ps->clientNum >= MAX_CLIENTS && !PM_ControlledByPlayer() )
+	{
+		return qfalse;
+	}
+
+	if ( pm->ps->pm_type != PM_NORMAL || !pm->gent || !pm->gent->client )
+	{
+		return qfalse;
+	}
+
+	// Vehicles, riding a vehicle and flying (jetpacks, hovering) have their own movement rules.
+	if ( pm->gent->client->NPC_class == CLASS_VEHICLE || PM_RidingVehicle() || Flying != FLY_NONE )
+	{
+		return qfalse;
+	}
+
+	// Water and slick surfaces (ice) use their own friction.
+	if ( pm->waterlevel > 0 || ( pml.groundTrace.surfaceFlags & SURF_SLICK ) )
+	{
+		return qfalse;
+	}
+
+	// Knockback and other effects that intentionally switch friction off.
+	if ( pm->ps->pm_flags & ( PMF_TIME_KNOCKBACK | PMF_TIME_NOFRICTION ) )
+	{
+		return qfalse;
+	}
+
+	// The melee debug mode stops the player with an early return that relies on friction.
+	if ( g_debugMelee->integer )
+	{
+		return qfalse;
+	}
+
+	// Moves that steer the character themselves and were tuned for the original acceleration.
+	const int legsAnimation = pm->ps->legsAnim;
+	if ( PM_InRoll( pm->ps )
+		|| PM_InKnockDown( pm->ps )
+		|| PM_InCartwheel( legsAnimation )
+		|| PM_FlippingAnim( legsAnimation )
+		|| PM_SaberInSpecialAttack( legsAnimation ) )
+	{
+		return qfalse;
+	}
+
+	// The force long jump slides along the ground using its own reduced friction.
+	if ( legsAnimation == BOTH_FORCELONGLEAP_START
+		|| legsAnimation == BOTH_FORCELONGLEAP_ATTACK
+		|| legsAnimation == BOTH_FORCELONGLEAP_LAND )
+	{
+		return qfalse;
+	}
+
+	return qtrue;
 }
 
 /*
@@ -2980,6 +3058,12 @@ static void PM_AirMove( void ) {
 			pm->ps->velocity[2] = 1000.0f;
 		}
 	}
+	else if ( g_momentumMovement->integer
+		&& !pVeh
+		&& ( pm->ps->clientNum < MAX_CLIENTS || PM_ControlledByPlayer() ) )
+	{// player on foot: apply the tunable air control from the momentum movement settings
+		accelerate = PM_Momentum_ScaleAirAcceleration( accelerate );
+	}
 	PM_Accelerate( wishdir, wishspeed, accelerate );
 
 
@@ -3116,7 +3200,11 @@ static void PM_WalkMove( void ) {
 			}
 		}
 	}
-	if ( !slide )
+	// Momentum movement replaces both friction and acceleration, so friction is skipped here
+	// and the momentum step runs below in place of PM_Accelerate.
+	const qboolean useMomentumMovement = PM_ShouldUseMomentumMovement();
+
+	if ( !slide && !useMomentumMovement )
 	{
 		PM_Friction ();
 	}
@@ -3280,7 +3368,17 @@ static void PM_WalkMove( void ) {
 		//===================================================
 	}
 
-	PM_Accelerate (wishdir, wishspeed, accelerate);
+	if ( useMomentumMovement )
+	{
+		// Work only with the part of the velocity that runs along the ground, so any leftover
+		// falling speed on the landing frame is not steered into a burst of forward speed.
+		PM_ClipVelocity( pm->ps->velocity, pml.groundTrace.plane.normal, pm->ps->velocity, OVERCLIP );
+		PM_Momentum_ApplyGroundMovement( pm->ps->velocity, wishdir, wishspeed, pm->ps->speed, pml.frametime );
+	}
+	else
+	{
+		PM_Accelerate (wishdir, wishspeed, accelerate);
+	}
 
 	//Com_Printf("velocity = %1.1f %1.1f %1.1f\n", pm->ps->velocity[0], pm->ps->velocity[1], pm->ps->velocity[2]);
 	//Com_Printf("velocity1 = %1.1f\n", VectorLength(pm->ps->velocity));
