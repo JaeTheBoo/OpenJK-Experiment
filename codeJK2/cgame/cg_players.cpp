@@ -29,6 +29,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "FxScheduler.h"
 #include "../game/ghoul2_shared.h"
 #include "../game/g_ragdoll.h"
+#include "../game/g_slice.h"
 #include "../game/anims.h"
 #include "../game/wp_saber.h"
 
@@ -5078,6 +5079,13 @@ Ghoul2 Insert Start
 		{
 			VectorCopy( ent.origin, ent.oldorigin );
 			VectorCopy( ent.origin, ent.lightingOrigin );
+		}
+
+		// A character cut in two by a lightsaber has been replaced by its pieces (see g_slice.h),
+		// from this frame on, even before the game's next update hides it.
+		if ( G_Slice_WasCut( cent->currentState.number ) )
+		{
+			return;
 		}
 
 		if ( cent->gent && cent->gent->client )

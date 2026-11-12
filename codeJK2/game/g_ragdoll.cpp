@@ -26,6 +26,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "g_ragdoll.h"
 #include "g_ragdoll_rig.h"
 #include "g_ragdoll_balance.h"
+#include "g_slice.h"
 #include "wp_saber.h"	// Force power levels
 
 #include <math.h>
@@ -542,6 +543,7 @@ void G_Ragdoll_Reset( void )
 	lastSceneRenderTime = -1;
 	sceneUnsimulatedSeconds = 0.0f;
 	ragdoll::ResetBalance();
+	G_Slice_Reset();
 	ragdoll::ClearSkeletonCache();
 }
 
@@ -1668,6 +1670,7 @@ void G_Ragdoll_OnEntityFreed( gentity_t *entity )
 	memset( &pendingDeaths[entityNumber], 0, sizeof( pendingDeaths[entityNumber] ) );
 	ragdollFinished[entityNumber] = false;
 	ragdoll::ForgetBalance( entityNumber );
+	G_Slice_ForgetCharacter( entityNumber );
 }
 
 /*
@@ -3858,6 +3861,13 @@ qboolean G_Ragdoll_UpdateAndPose( gentity_t *entity, int renderTime, vec3_t rend
 	}
 	const int entityNumber = EntityIndex( entity );
 	if ( entityNumber < 0 || entityNumber >= MAX_GENTITIES )
+	{
+		return qfalse;
+	}
+
+	// A character being cut in two (see g_slice.h) is replaced by its pieces, from exactly the pose
+	// on screen, before anything else happens to it.
+	if ( G_Slice_CutIfRequested( entity, renderTime, renderOrigin, renderAxis ) )
 	{
 		return qfalse;
 	}

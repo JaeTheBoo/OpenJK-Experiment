@@ -30,6 +30,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "../game/wp_saber.h"
 #include "../game/anims.h"
 #include "../game/g_functions.h"
+#include "../game/g_slice.h"
 
 #define MASK_CAMERACLIP (MASK_SOLID)
 #define CAMERA_SIZE	4
@@ -1934,6 +1935,7 @@ wasForceSpeed=isForceSpeed;
 	// build the render lists
 	if ( !cg.hyperspace ) {
 		CG_AddPacketEntities();			// adter calcViewValues, so predicted player state is correct
+		G_Slice_AddPiecesToScene( cg.time );	// pieces of characters cut by a lightsaber (see g_slice.h)
 		CG_AddMarks();
 	}
 

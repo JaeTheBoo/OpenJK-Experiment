@@ -26,6 +26,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "g_local.h"
 #include "objectives.h"
 #include "wp_saber.h"
+#include "g_slice.h"
 
 extern	bool		in_camera;
 
@@ -1036,6 +1037,14 @@ void ClientCommand( int clientNum ) {
 	else if (Q_stricmp (cmd, "noclip") == 0)
 	{
 		Cmd_Noclip_f (ent);
+	}
+	else if (Q_stricmp (cmd, "slice") == 0)
+	{
+		// Lightsaber slicing prototype: cut the character under the crosshair (see g_slice.h).
+		if ( CheatsOk( ent ) )
+		{
+			G_Slice_Command( ent, gi.argv( 1 ) );
+		}
 	}
 	else if (Q_stricmp (cmd, "kill") == 0)
 	{
