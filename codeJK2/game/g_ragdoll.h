@@ -38,7 +38,10 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 //     second. Strong muscles pull every part toward the live animation while the hit shoves the body,
 //     so the character flinches (torso twisting, head snapping, arms flinging) without ever stopping
 //     what it is doing. Killed or knocked down mid-reaction, the body carries on with its momentum.
-//   * Knockdowns: see G_Ragdoll_OnForceKnockdown.
+//   * Stumbles: hits add up. A character knocked far enough off balance stumbles a step or two in
+//     the direction of the push, leaning with it, and one pushed further falls over into a
+//     knockdown. See g_ragdoll_balance.h.
+//   * Knockdowns: see G_Ragdoll_OnKnockdown.
 //
 // Collision:
 //   * Body parts collide with each other (self collision), except parts joined by a joint or that
@@ -77,16 +80,17 @@ void G_Ragdoll_OnEntityFreed( gentity_t *entity );
 
 /*
 ==================
-G_Ragdoll_OnForceKnockdown
+G_Ragdoll_OnKnockdown
 
-Called by WP_ForceKnockdown after Force Push or Pull knocks a living character over (NPCs only,
-never the player). The character falls as a ragdoll from the next drawn frame, lies dazed for a
-moment once it lands, then gets back up with the game's own get-up animation and its AI carries
-on. Killed while down, it simply becomes a death ragdoll. Can be switched off with
-g_ragdollKnockdowns 0.
+Called once a living character has been put into a knockdown animation: by WP_ForceKnockdown
+(Force Push or Pull), by G_Knockdown (explosions and other heavy blows) and by the stumbling code
+(pushed over while off balance). NPCs only, never the player. The character falls as a ragdoll
+from the next drawn frame, lies dazed for a moment once it lands, then gets back up with the
+game's own get-up animation and its AI carries on. Killed while down, it simply becomes a death
+ragdoll. Can be switched off with g_ragdollKnockdowns 0.
 ==================
 */
-void G_Ragdoll_OnForceKnockdown( gentity_t *entity );
+void G_Ragdoll_OnKnockdown( gentity_t *entity );
 
 /*
 ==================

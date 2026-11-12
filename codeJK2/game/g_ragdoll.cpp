@@ -25,6 +25,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "g_local.h"
 #include "g_ragdoll.h"
 #include "g_ragdoll_rig.h"
+#include "g_ragdoll_balance.h"
 #include "wp_saber.h"	// Force power levels
 
 #include <math.h>
@@ -375,6 +376,7 @@ void G_Ragdoll_RegisterCvars( void )
 	g_ragdollKnockdowns		= gi.cvar( "g_ragdollKnockdowns", "1", CVAR_ARCHIVE );
 	g_ragdollHitReactions	= gi.cvar( "g_ragdollHitReactions", "1", CVAR_ARCHIVE );
 	g_ragdollHitReactionScale = gi.cvar( "g_ragdollHitReactionScale", "0.4", CVAR_ARCHIVE );
+	ragdoll::RegisterBalanceCvars();	// g_ragdollStumbles, g_ragdollBalance
 }
 
 void G_Ragdoll_Reset( void )
@@ -391,6 +393,7 @@ void G_Ragdoll_Reset( void )
 	memset( ragdollFinished, 0, sizeof( ragdollFinished ) );
 	lastSceneRenderTime = -1;
 	sceneUnsimulatedSeconds = 0.0f;
+	ragdoll::ResetBalance();
 	ragdoll::ClearSkeletonCache();
 }
 
@@ -653,6 +656,25 @@ static void SetMuscle( RagdollInstance &instance, int jointIndex, const Quaterni
 static bool IsKnockdownAnimation( int animation );
 static bool IsGetUpAnimation( int animation );
 
+// True if this kind of damage physically pushes living characters. Damage that does not push at all
+// is excluded, and so are Force powers that play their own animation on the victim.
+static bool PushesLivingCharacters( int meansOfDeath )
+{
+	bool isExplosive;
+	return ImpulsePerDamagePoint( meansOfDeath, isExplosive ) > 0.0f
+		&& meansOfDeath != MOD_ELECTROCUTE && meansOfDeath != MOD_FORCE_GRIP;
+}
+
+// How much a hit knocks a living character off balance (see g_ragdoll_balance.h). Unlike the push
+// on the body, small hits are not rounded up, so the many tiny hits of a saber sliding across a
+// character do not add up to a stumble.
+static float BalancePushOfHit( int damage, int meansOfDeath )
+{
+	bool isExplosive;
+	const float countedDamage = ragdoll::Clamp( (float)damage, 0.0f, LARGEST_DAMAGE_FOR_IMPULSE );
+	return countedDamage * ImpulsePerDamagePoint( meansOfDeath, isExplosive ) * g_ragdollImpulseScale->value;
+}
+
 // True if a hit of this kind on this living character should jolt it physically. Characters that
 // are knocked down, getting up, being gripped or manning a mounted gun are left to their animation.
 static bool WantsHitReaction( const gentity_t *target, int meansOfDeath )
@@ -661,11 +683,9 @@ static bool WantsHitReaction( const gentity_t *target, int meansOfDeath )
 	{
 		return false;
 	}
-	bool isExplosive;
-	if ( ImpulsePerDamagePoint( meansOfDeath, isExplosive ) <= 0.0f
-		|| meansOfDeath == MOD_ELECTROCUTE || meansOfDeath == MOD_FORCE_GRIP )
+	if ( !PushesLivingCharacters( meansOfDeath ) )
 	{
-		return false;	// no push, or a Force power with its own animation
+		return false;
 	}
 	const playerState_t &state = target->client->ps;
 	return !( state.eFlags & EF_FORCE_GRIPPED )
@@ -703,6 +723,12 @@ void G_Ragdoll_RecordDamage( gentity_t *target, const vec3_t direction, const ve
 	if ( !g_ragdoll || !g_ragdoll->integer )
 	{
 		return;
+	}
+
+	// A hard hit on a living character knocks it off balance: it may stumble or fall over.
+	if ( direction && target->client && target->health > 0 && PushesLivingCharacters( meansOfDeath ) )
+	{
+		ragdoll::LoseBalance( target, direction, record.point, BalancePushOfHit( damage, meansOfDeath ) );
 	}
 
 	// Hitting a body that is already a ragdoll pushes it straight away (gently, if it is a living
@@ -1194,6 +1220,7 @@ void G_Ragdoll_OnDeath( gentity_t *entity, int meansOfDeath, int hitLocation )
 	ragdollFinished[entityNumber] = false;
 
 	pendingHitReactions[entityNumber].pending = false;
+	ragdoll::ForgetBalance( entityNumber );		// a stumble ends with death; the body carries its speed on
 
 	// Killed while knocked down or while reacting to a hit: the body carries on as a death ragdoll,
 	// keeping all of its momentum.
@@ -1219,7 +1246,7 @@ void G_Ragdoll_OnDeath( gentity_t *entity, int meansOfDeath, int hitLocation )
 	}
 }
 
-void G_Ragdoll_OnForceKnockdown( gentity_t *entity )
+void G_Ragdoll_OnKnockdown( gentity_t *entity )
 {
 	if ( !entity || !entity->client || !g_ragdoll || !g_ragdoll->integer || !g_ragdollKnockdowns->integer )
 	{
@@ -1272,6 +1299,7 @@ void G_Ragdoll_OnEntityFreed( gentity_t *entity )
 	memset( &lastDamage[entityNumber], 0, sizeof( lastDamage[entityNumber] ) );
 	memset( &pendingDeaths[entityNumber], 0, sizeof( pendingDeaths[entityNumber] ) );
 	ragdollFinished[entityNumber] = false;
+	ragdoll::ForgetBalance( entityNumber );
 }
 
 /*
@@ -2033,12 +2061,45 @@ static void ApplySettlingDamping( RagdollInstance &instance )
 	}
 }
 
+// How much of a stumble's lean each body takes: none for the hips and legs (which step under the
+// body), rising up the spine, and all of it from the chest up (head and arms lean with the chest).
+static float StumbleLeanShare( int bodyIndex )
+{
+	switch ( bodyIndex )
+	{
+	case ragdoll::BODY_PELVIS:
+	case ragdoll::BODY_RIGHT_THIGH:
+	case ragdoll::BODY_RIGHT_SHIN:
+	case ragdoll::BODY_RIGHT_FOOT:
+	case ragdoll::BODY_LEFT_THIGH:
+	case ragdoll::BODY_LEFT_SHIN:
+	case ragdoll::BODY_LEFT_FOOT:
+		return 0.0f;
+	case ragdoll::BODY_LOWER_SPINE:
+		return 0.35f;
+	case ragdoll::BODY_MIDDLE_SPINE:
+		return 0.7f;
+	default:
+		return 1.0f;
+	}
+}
+
 // Each physics step of a hit reaction: carries the body along with the character's own movement
 // and pulls every part back toward where the animation has it, so only the jolt from the hit is
-// left to the physics.
+// left to the physics. While the character is stumbling, the upper body is pulled toward a pose
+// leaning with the push instead, and the reaction lasts until the stumble is over.
 static void DriveTowardAnimation( RagdollInstance &instance )
 {
-	instance.secondsSinceLastHit += PHYSICS_STEP_SECONDS;
+	Vector3 leanDirection( 0.0f, 0.0f, 0.0f );
+	float leanRadians = 0.0f;
+	if ( ragdoll::StumbleLean( instance.entityNumber, leanDirection, leanRadians ) )
+	{
+		instance.secondsSinceLastHit = 0.0f;	// stay physical for the whole stumble
+	}
+	else
+	{
+		instance.secondsSinceLastHit += PHYSICS_STEP_SECONDS;
+	}
 	if ( !instance.hasAnimationTargets )
 	{
 		return;		// the animation pose has not been read yet
@@ -2063,14 +2124,29 @@ static void DriveTowardAnimation( RagdollInstance &instance )
 	instance.previousPelvisTarget = pelvisTarget;
 	instance.hasPreviousPelvisTarget = true;
 
+	// The orientation each body should have: the animation's, tilted toward the stumble direction
+	// for the upper body (rotating about this axis tips "up" toward the lean direction).
+	Quaternion targetRotations[HUMANOID_BODY_COUNT];
+	const Vector3 leanAxis = ragdoll::Normalized( ragdoll::Cross( WORLD_UP, leanDirection ) );
+	const bool leaning = leanRadians > 0.0f && ragdoll::LengthSquared( leanAxis ) > ragdoll::SMALL_NUMBER;
+	for ( int bodyIndex = 0; bodyIndex < HUMANOID_BODY_COUNT; bodyIndex++ )
+	{
+		targetRotations[bodyIndex] = instance.animationBodyTargets[bodyIndex].rotation;
+		const float leanShare = StumbleLeanShare( bodyIndex );
+		if ( leaning && leanShare > 0.0f )
+		{
+			targetRotations[bodyIndex] = ragdoll::NormalizedQuaternion(
+				ragdoll::QuaternionFromAxisAngle( leanAxis, leanRadians * leanShare ) * targetRotations[bodyIndex] );
+		}
+	}
+
 	// Strong muscles toward the animated pose: legs strongest so the character keeps its footing,
 	// arms weakest so they fling.
 	for ( int jointIndex = 0; jointIndex < HUMANOID_JOINT_COUNT; jointIndex++ )
 	{
 		const Joint &joint = simulation.joints[jointIndex];
 		const Quaternion targetRelative = ragdoll::NormalizedQuaternion(
-			ragdoll::Conjugate( instance.animationBodyTargets[joint.parentBodyIndex].rotation )
-			* instance.animationBodyTargets[joint.childBodyIndex].rotation );
+			ragdoll::Conjugate( targetRotations[joint.parentBodyIndex] ) * targetRotations[joint.childBodyIndex] );
 
 		float naturalFrequency;
 		switch ( ragdoll::MuscleGroupForBody( ragdoll::BodyIndexForJoint( jointIndex ) ) )
@@ -2618,6 +2694,13 @@ qboolean G_Ragdoll_UpdateAndPose( gentity_t *entity, int renderTime, vec3_t rend
 	if ( g_ragdoll->integer )
 	{
 		StepAllRagdolls( renderTime );
+
+		// A stumbling character is carried along and steps with its legs; one pushed over falls as a
+		// knockdown ragdoll (started just below, or turned from its hit reaction straight away).
+		if ( entity->health > 0 && ragdoll::UpdateBalance( entity ) == ragdoll::BALANCE_FALLING )
+		{
+			G_Ragdoll_OnKnockdown( entity );
+		}
 	}
 
 	RagdollInstance *instance = FindInstance( entityNumber );

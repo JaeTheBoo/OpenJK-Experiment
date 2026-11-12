@@ -82,6 +82,8 @@ set(JK2SPGameGameFiles
 	"${JK2SPDir}/game/g_combat.cpp"
 	"${JK2SPDir}/game/g_ragdoll.cpp"
 	"${JK2SPDir}/game/g_ragdoll.h"
+	"${JK2SPDir}/game/g_ragdoll_balance.cpp"
+	"${JK2SPDir}/game/g_ragdoll_balance.h"
 	"${JK2SPDir}/game/g_ragdoll_math.h"
 	"${JK2SPDir}/game/g_ragdoll_rig.cpp"
 	"${JK2SPDir}/game/g_ragdoll_rig.h"

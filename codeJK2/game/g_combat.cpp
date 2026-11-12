@@ -4442,6 +4442,8 @@ void G_Knockdown( gentity_t *self, gentity_t *attacker, vec3_t pushDir, float st
 				self->client->ps.legsAnimTimer += addTime;
 				self->client->ps.torsoAnimTimer += addTime;
 			}
+			// Knocked-down NPCs (for example by an explosion) fall as ragdolls and get back up afterwards.
+			G_Ragdoll_OnKnockdown( self );
 		}
 	}
 }

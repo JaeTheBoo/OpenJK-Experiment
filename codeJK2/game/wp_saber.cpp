@@ -5569,7 +5569,7 @@ void WP_ForceKnockdown( gentity_t *self, gentity_t *pusher, qboolean pull, qbool
 				self->client->ps.torsoAnimTimer += addTime;
 			}
 			// Knocked-down NPCs fall as ragdolls and get back up afterwards.
-			G_Ragdoll_OnForceKnockdown( self );
+			G_Ragdoll_OnKnockdown( self );
 			//
 			if ( pusher->NPC && pusher->enemy == self )
 			{//pushed pushed down his enemy
