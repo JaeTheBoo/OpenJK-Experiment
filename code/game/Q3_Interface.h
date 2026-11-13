@@ -591,12 +591,9 @@ private:
 	void VariableLoadFloats( varFloat_m &fmap );
 	void VariableLoadStrings( int type, varString_m &fmap );
 	void InitVariables( void );
-	int  GetStringVariable( const char *name, const char **value );
 	int  GetFloatVariable( const char *name, float *value );
 	int  GetVectorVariable( const char *name, vec3_t value );
-	int  VariableDeclared( const char *name );
 	int  SetFloatVariable( const char *name, float value );
-	int  SetStringVariable( const char *name, const char *value );
 	int  SetVectorVariable( const char *name, const char *value );
 	void PrisonerObjCheck(const char *name,const char *data);
 
@@ -653,6 +650,12 @@ public:
 
 	// Load all Variables.
 	int VariableLoad( void );
+
+	// Script string variables, also used by the game itself: lightsaber slicing carries the wounds
+	// of maimed characters across saved games in them (see g_slice.h).
+	int  VariableDeclared( const char *name );
+	int  GetStringVariable( const char *name, const char **value );
+	int  SetStringVariable( const char *name, const char *value );
 
     // Overiddables.
 

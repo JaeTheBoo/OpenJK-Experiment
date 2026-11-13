@@ -31,6 +31,9 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "anims.h"
 #include "objectives.h"
 #include "bg_pmove_momentum.h"
+#include "g_ragdoll.h"
+#include "g_saber_guard.h"
+#include "g_slice.h"
 #include "../cgame/cg_local.h"	// yeah I know this is naughty, but we're shipping soon...
 
 //rww - RAGDOLL_BEGIN
@@ -710,6 +713,8 @@ void G_InitCvars( void ) {
 
 	gi.cvar( "g_clearstats", "1", CVAR_ROM|CVAR_NORESTART);
 
+	G_Ragdoll_RegisterCvars();	// active ragdolls, see g_ragdoll.h
+	G_SaberGuard_RegisterCvars();	// the player's lightsaber guard, see g_saber_guard.h
 }
 /*
 ============
@@ -744,6 +749,8 @@ void InitGame(  const char *mapname, const char *spawntarget, int checkSum, cons
 	G_InitCvars();
 
 	G_InitMemory();
+
+	G_Ragdoll_Reset();	// no ragdoll survives a level change or a loaded game
 
 	// set some level globals
 	memset( &level, 0, sizeof( level ) );
@@ -828,6 +835,8 @@ ShutdownGame
 */
 void ShutdownGame( void )
 {
+	G_Ragdoll_Reset();
+
 	// write all the client session data so we can get it back
 	G_WriteSessionData();
 
@@ -1465,6 +1474,14 @@ qboolean G_RagDoll(gentity_t *ent, vec3_t forcedAngles)
 	int ragVar = g_broadsword->integer;
 
 	if (!ragVar)
+	{
+		return qfalse;
+	}
+
+	// Characters handled by the active ragdolls of g_ragdoll.h never get this ragdoll as well: both
+	// would write the same bones. Nor do characters a lightsaber cut into pieces (see g_slice.h):
+	// their pieces are drawn instead, and the character is hidden.
+	if ( G_Ragdoll_OwnsBody( ent ) || ( ent && G_Slice_WasCut( ent->s.number ) ) )
 	{
 		return qfalse;
 	}

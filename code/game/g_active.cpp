@@ -29,6 +29,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "g_vehicles.h"
 #include "b_local.h"
 #include "g_navigator.h"
+#include "g_ragdoll.h"
+#include "g_saber_guard.h"
 
 #ifdef _DEBUG
 	#include <float.h>
@@ -5235,6 +5237,10 @@ extern cvar_t	*g_skippingcin;
 
 	G_CheckClampUcmd( ent, ucmd );
 
+	// The player's lightsaber guard (see g_saber_guard.h): with the saber, alt-attack guards and the
+	// throw button does what alt-attack used to, and the guard's aim follows the view.
+	G_SaberGuard_ReadCommand( ent, ucmd );
+
 	WP_ForcePowersUpdate( ent, ucmd );
 
 	//if we have the saber in hand, check for starting a block to reflect shots
@@ -5379,6 +5385,16 @@ extern cvar_t	*g_skippingcin;
 	//play/stop any looping sounds tied to controlled movement
 	G_CheckMovingLoopingSounds( ent, ucmd );
 
+	// An NPC reacting physically to being shot has lost control of its body (see g_ragdoll.h): it
+	// neither walks nor shoots until it has its balance back. Its AI keeps thinking meanwhile.
+	if ( G_Ragdoll_IsControllingCharacter( ent ) )
+	{
+		ucmd->forwardmove = 0;
+		ucmd->rightmove = 0;
+		ucmd->upmove = 0;
+		ucmd->buttons = 0;
+	}
+
 	//remember your last angles
 	VectorCopy ( ent->client->ps.viewangles, ent->lastAngles );
 	// set up for pmove
@@ -5406,6 +5422,9 @@ extern cvar_t	*g_skippingcin;
 	// perform a pmove
 	Pmove( &pm );
 	pm.gent = 0;
+
+	// The player's blade stops other blades and bolts only while it guards or attacks (see g_saber_guard.h).
+	G_SaberGuard_UpdateBlade( ent );
 
 	ProcessGenericCmd(ent, pm.cmd.generic_cmd);
 

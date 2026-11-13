@@ -30,6 +30,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "../game/anims.h"
 #include "../game/wp_saber.h"
 #include "../game/g_vehicles.h"
+#include "../game/g_ragdoll.h"
+#include "../game/g_slice.h"
 #include "../Rufl/hstring.h"
 
 #define	LOOK_SWING_SCALE	0.5f
@@ -2532,14 +2534,21 @@ static void CG_G2PlayerAngles( centity_t *cent, vec3_t legs[3], vec3_t angles )
 
 		VectorCopy( cent->lerpAngles, angles );
 
-		BG_G2SetBoneAngles( cent, cent->gent, cent->gent->craniumBone, vec3_origin, BONE_ANGLES_POSTMULT, POSITIVE_X, NEGATIVE_Y, NEGATIVE_Z, cgs.model_draw );
-		BG_G2SetBoneAngles( cent, cent->gent, cent->gent->cervicalBone, vec3_origin, BONE_ANGLES_POSTMULT, POSITIVE_X, NEGATIVE_Y, NEGATIVE_Z, cgs.model_draw );
-		BG_G2SetBoneAngles( cent, cent->gent, cent->gent->thoracicBone, vec3_origin, BONE_ANGLES_POSTMULT, POSITIVE_X, NEGATIVE_Y, NEGATIVE_Z, cgs.model_draw );
-
 		cent->pe.torso.pitchAngle = 0;
 		cent->pe.torso.yawAngle = 0;
-		BG_G2SetBoneAngles( cent, cent->gent, cent->gent->upperLumbarBone, vec3_origin, BONE_ANGLES_POSTMULT, POSITIVE_X, NEGATIVE_Y, NEGATIVE_Z, cgs.model_draw );
-		BG_G2SetBoneAngles( cent, cent->gent, cent->gent->lowerLumbarBone, vec3_origin, BONE_ANGLES_POSTMULT, POSITIVE_X, NEGATIVE_Y, NEGATIVE_Z, cgs.model_draw );
+
+		// A body posed by the active ragdolls (see g_ragdoll.h) keeps the spine its ragdoll gave it.
+		// Flattening these bones every frame would undo that pose wherever the ragdoll no longer
+		// rewrites it: on a corpse whose ragdoll came to rest and was recycled, and on a corpse
+		// restored from a saved game, whose ragdoll restarts from the pose it was saved in.
+		if ( !G_Ragdoll_OwnsBody( cent->gent ) )
+		{
+			BG_G2SetBoneAngles( cent, cent->gent, cent->gent->craniumBone, vec3_origin, BONE_ANGLES_POSTMULT, POSITIVE_X, NEGATIVE_Y, NEGATIVE_Z, cgs.model_draw );
+			BG_G2SetBoneAngles( cent, cent->gent, cent->gent->cervicalBone, vec3_origin, BONE_ANGLES_POSTMULT, POSITIVE_X, NEGATIVE_Y, NEGATIVE_Z, cgs.model_draw );
+			BG_G2SetBoneAngles( cent, cent->gent, cent->gent->thoracicBone, vec3_origin, BONE_ANGLES_POSTMULT, POSITIVE_X, NEGATIVE_Y, NEGATIVE_Z, cgs.model_draw );
+			BG_G2SetBoneAngles( cent, cent->gent, cent->gent->upperLumbarBone, vec3_origin, BONE_ANGLES_POSTMULT, POSITIVE_X, NEGATIVE_Y, NEGATIVE_Z, cgs.model_draw );
+			BG_G2SetBoneAngles( cent, cent->gent, cent->gent->lowerLumbarBone, vec3_origin, BONE_ANGLES_POSTMULT, POSITIVE_X, NEGATIVE_Y, NEGATIVE_Z, cgs.model_draw );
+		}
 
 		cent->pe.legs.pitchAngle = angles[0];
 		cent->pe.legs.yawAngle = angles[1];
@@ -7186,6 +7195,21 @@ Ghoul2 Insert Start
 			VectorCopy( ent.origin, ent.lightingOrigin );
 		}
 
+		// A dead character may be a ragdoll: the physics then supplies the pose, position and facing
+		// (see g_ragdoll.h). Living characters reacting to a hit are posed here as well.
+		if ( G_Ragdoll_UpdateAndPose( cent->gent, cg.time, ent.origin, ent.axis, tempAngles ) )
+		{
+			VectorCopy( ent.origin, ent.oldorigin );
+			VectorCopy( ent.origin, ent.lightingOrigin );
+		}
+
+		// A character cut in two by a lightsaber has been replaced by its pieces (see g_slice.h),
+		// from this frame on, even before the game's next update hides it.
+		if ( G_Slice_WasCut( cent->currentState.number ) )
+		{
+			return;
+		}
+
 		if ( cent->gent && cent->gent->client )
 		{
 			cent->gent->client->ps.legsYaw = tempAngles[YAW];
@@ -7241,6 +7265,10 @@ extern vmCvar_t	cg_thirdPersonAlpha;
 			}
 		}
 		CG_AddRefEntityWithPowerups( &ent, cent->currentState.powerups, cent );
+
+		// A character that lost an arm to a lightsaber: Ghoul2 no longer draws its body, which is
+		// drawn here without the missing parts, in the colour just given to its model (see g_slice.h).
+		G_Slice_AddMaimedCharacter( cent->gent, ent, cg.time );
 		VectorCopy( tempAngles, cent->renderAngles );
 
 		//Initialize all these to *some* valid data

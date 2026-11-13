@@ -448,6 +448,7 @@ void NPC_Pain( gentity_t *self, gentity_t *inflictor, gentity_t *other, const ve
 		{//we weren't already enemies
 			if ( self->enemy || other->enemy
 				|| (other->s.number&&other->s.number!=player->client->ps.viewEntity)
+				|| G_IsReflectedMissile( inflictor )//a bolt the player knocked back with a saber: an accident
 				/*|| (!other->s.number&&Q_irand( 0, 3 ))*/ )
 			{//if one of us actually has an enemy already, it's okay, just an accident OR wasn't hit by player or someone controlled by player OR player hit ally and didn't get 25% chance of getting mad (FIXME:accumulate anger+base on diff?)
 				//FIXME: player should have to do a certain amount of damage to ally or hit them several times to make them mad

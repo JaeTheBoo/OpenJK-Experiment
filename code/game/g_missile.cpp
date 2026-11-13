@@ -24,6 +24,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "g_local.h"
 #include "g_functions.h"
 #include "wp_saber.h"
+#include "g_saber_guard.h"
 #include "bg_local.h"
 #include "../cgame/cg_local.h"
 #include "b_local.h"
@@ -796,6 +797,13 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace, int hitLoc=HL_NONE )
 		}
 
 		G_MissileStick( ent, other, trace );
+		return;
+	}
+
+	// The player's lightsaber guard (see g_saber_guard.h) deflects the bolt, or lets it through to the
+	// player when the guard is down.
+	if ( G_SaberGuard_DeflectMissile( ent, &other, trace ) )
+	{
 		return;
 	}
 

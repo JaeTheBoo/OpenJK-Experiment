@@ -31,6 +31,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "FxScheduler.h"
 #include "../game/wp_saber.h"
 #include "../game/g_vehicles.h"
+#include "../game/g_slice.h"
 
 #define MASK_CAMERACLIP (MASK_SOLID)
 #define CAMERA_SIZE	4
@@ -2140,6 +2141,7 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView ) {
 	// build the render lists
 	if ( !cg.hyperspace ) {
 		CG_AddPacketEntities(qfalse);			// adter calcViewValues, so predicted player state is correct
+		G_Slice_AddPiecesToScene( cg.time );	// pieces of characters cut by a lightsaber (see g_slice.h)
 		CG_AddMarks();
 		CG_DrawMiscEnts();
 	}

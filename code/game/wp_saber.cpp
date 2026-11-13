@@ -27,6 +27,9 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "g_functions.h"
 #include "wp_saber.h"
 #include "g_vehicles.h"
+#include "g_ragdoll.h"
+#include "g_saber_guard.h"
+#include "g_slice.h"
 #include "../qcommon/tri_coll_test.h"
 #include "../cgame/cg_local.h"
 
@@ -2580,7 +2583,7 @@ qboolean WP_SaberDamageForTrace( int ignore, vec3_t start, vec3_t end, float dmg
 			qboolean sabersIntersect = WP_SabersIntersect( attacker, saberNum, bladeNum, owner, qfalse );//qtrue );
 			float sabersDist;
 			if ( attacker && attacker->client && attacker->client->ps.saberInFlight
-				&& owner && owner->s.number == 0 && (g_saberAutoBlocking->integer||attacker->client->ps.saberBlockingTime>level.time) )//NPC flying saber hit player's saber bounding box
+				&& owner && owner->s.number == 0 && (G_PlayerBlocksAutomatically()||attacker->client->ps.saberBlockingTime>level.time) )//NPC flying saber hit player's saber bounding box
 			{//players have g_saberAutoBlocking, do the more generous check against flying sabers
 				//FIXME: instead of hitting the player's saber bounding box
 				//and picking an anim afterwards, have him use AI similar
@@ -4045,8 +4048,12 @@ qboolean WP_SaberParry( gentity_t *victim, gentity_t *attacker, int saberNum, in
 	{
 		return qfalse;
 	}
-	if ( victim->s.number || g_saberAutoBlocking->integer || victim->client->ps.saberBlockingTime > level.time )
+	if ( victim->s.number || G_PlayerBlocksAutomatically() || victim->client->ps.saberBlockingTime > level.time )
 	{//either an NPC or a player who is blocking
+		if ( !G_SaberGuard_PayForParry( victim, attacker, saberHitLocation ) )
+		{//the player's guard gives way: not enough Force left to block (see g_saber_guard.h)
+			return qfalse;
+		}
 		if ( !PM_SaberInTransitionAny( victim->client->ps.saberMove )
 			&& !PM_SaberInBounce( victim->client->ps.saberMove )
 			&& !PM_SaberInKnockaway( victim->client->ps.saberMove ) )
@@ -4504,6 +4511,9 @@ void WP_SaberDamageTrace( gentity_t *ent, int saberNum, int bladeNum )
 	int			baseDFlags = 0;
 	qboolean	hit_wall = qfalse;
 	qboolean	brokenParry = qfalse;
+
+	// Severed pieces lying in this blade's path are cut again (see g_slice.h).
+	G_Slice_SaberSweep( ent, saberNum, bladeNum );
 
 	for ( int ven = 0; ven < MAX_SABER_VICTIMS; ven++ )
 	{
@@ -5280,9 +5290,16 @@ void WP_SaberDamageTrace( gentity_t *ent, int saberNum, int bladeNum )
 				}
 				else if ( entAttacking && hitOwnerDefending )
 				{//I'm attacking hit, they're parrying
-					qboolean activeDefense = (qboolean)(hitOwner->s.number||g_saberAutoBlocking->integer||hitOwner->client->ps.saberBlockingTime > level.time);
+					qboolean activeDefense = (qboolean)(hitOwner->s.number||G_PlayerBlocksAutomatically()||hitOwner->client->ps.saberBlockingTime > level.time);
+					qboolean guardGaveWay = qfalse;
+					if ( activeDefense && saberHitFraction < 1.0f && !G_SaberGuard_PayForParry( hitOwner, ent, saberHitLocation ) )
+					{//the player's guard gives way: not enough Force left to block, so the strike carries through (see g_saber_guard.h)
+						activeDefense = qfalse;
+						guardGaveWay = qtrue;
+					}
 					if ( !Q_irand( 0, g_saberLockRandomNess->integer*3 )
 						&& activeDefense
+						&& !G_SaberGuard_Parried( hitOwner, ent )//a timed parry has just knocked a saber away: no lock (see g_saber_guard.h)
 						&& (g_debugSaberLock->integer || forceLock ||
 							((hitOwner->client->ps.saberMove != LS_READY || (entPowerLevel-hitOwner->client->ps.forcePowerLevel[FP_SABER_DEFENSE]) < Q_irand( -6, 0 ) )
 								&& ( ( entPowerLevel < FORCE_LEVEL_3 && hitOwner->client->ps.forcePowerLevel[FP_SABER_DEFENSE] > FORCE_LEVEL_2 )
@@ -5321,7 +5338,8 @@ void WP_SaberDamageTrace( gentity_t *ent, int saberNum, int bladeNum )
 									&& ent->client->ps.forcePowerLevel[FP_SABER_DEFENSE] < FORCE_LEVEL_2
 									//&& (ent->s.number||g_saberRealisticCombat->integer)
 									&& Q_irand( 0, hitOwner->client->ps.SaberDisarmBonus( 0 ) ) > 0
-									&& (hitOwner->s.number || g_saberAutoBlocking->integer || !Q_irand( 0, 2 )) )//if player defending and autoblocking is on, this is less likely to happen, so don't do the random check
+									&& (hitOwner->s.number || g_saberAutoBlocking->integer || !Q_irand( 0, 2 ))//if player defending and autoblocking is on, this is less likely to happen, so don't do the random check
+									&& !G_SaberGuard_OwnsDisarms( hitOwner ) )//only the player's parries disarm (see g_saber_guard.h)
 								{//knocked the saber right out of his hand! (never happens to player)
 									//Get a good velocity to send the saber in based on my parry move
 									vec3_t	throwDir;
@@ -5346,7 +5364,8 @@ void WP_SaberDamageTrace( gentity_t *ent, int saberNum, int bladeNum )
 								&& hitOwnerPowerLevel < entPowerLevel)//they are defending, but their defense strength is lower than my attack...
 							|| (!deflected && Q_irand( 0, Q_max(0, PM_PowerLevelForSaberAnim( &ent->client->ps, saberNum ) - hitOwner->client->ps.forcePowerLevel[FP_SABER_DEFENSE])/*PM_PowerLevelForSaberAnim( &hitOwner->client->ps )*/ ) > 0 ) )
 						{//broke their parry altogether
-							if ( entPowerLevel > FORCE_LEVEL_2 || Q_irand( 0, Q_max(0, ent->client->ps.forcePowerLevel[FP_SABER_OFFENSE] - hitOwner->client->ps.forcePowerLevel[FP_SABER_DEFENSE]) ) )
+							if ( guardGaveWay//the player's guard gave way: the strike carries through (see g_saber_guard.h)
+								|| entPowerLevel > FORCE_LEVEL_2 || Q_irand( 0, Q_max(0, ent->client->ps.forcePowerLevel[FP_SABER_OFFENSE] - hitOwner->client->ps.forcePowerLevel[FP_SABER_DEFENSE]) ) )
 							{//chance of continuing with the attack (not bouncing back)
 								ent->client->ps.saberEventFlags &= ~SEF_BLOCKED;
 								ent->client->ps.saberBounceMove = LS_NONE;
@@ -5359,6 +5378,7 @@ void WP_SaberDamageTrace( gentity_t *ent, int saberNum, int bladeNum )
 							if ( !(hitOwner->client->ps.saber[0].saberFlags&SFL_NOT_DISARMABLE)
 								&& hitOwner->client->ps.forcePowerLevel[FP_SABER_DEFENSE] < FORCE_LEVEL_2
 								//&& (ent->s.number||g_saberRealisticCombat->integer)
+								&& !G_SaberGuard_OwnsDisarms( hitOwner )//only a failed parry disarms the player (see g_saber_guard.h)
 								&& Q_irand( 0, 2-ent->client->ps.SaberDisarmBonus( bladeNum ) ) <= 0 )
 							{//knocked the saber right out of his hand!
 								//get the right velocity for my attack direction
@@ -5551,6 +5571,11 @@ void WP_SaberDamageTrace( gentity_t *ent, int saberNum, int bladeNum )
 							if ( !WP_SaberParry( hitOwner, ent, saberNum, bladeNum ) )
 							{//FIXME: hitOwner can't parry, do some time-consuming saber-knocked-aside broken parry anim?
 								//hitOwner->client->ps.saberBlocked = BLOCKED_PARRY_BROKEN;
+								if ( G_SaberGuard_GaveWay( hitOwner, ent ) )
+								{//the player's guard gave way (see g_saber_guard.h): the saber is knocked aside, as in a broken parry
+									hitOwner->client->ps.saberBlocked = BLOCKED_PARRY_BROKEN;
+									hitOwner->client->ps.saberBounceMove = LS_NONE;
+								}
 							}
 						}
 					}
@@ -7429,6 +7454,11 @@ void WP_SaberStartMissileBlockCheck( gentity_t *self, usercmd_t *ucmd  )
 		return;
 	}
 
+	if ( !self->s.number && G_SaberGuard_RulesApply() )
+	{//the player's guard deflects bolts itself, held the way the player aims it (see g_saber_guard.h)
+		return;
+	}
+
 	if ( self->client->NPC_class == CLASS_ROCKETTROOPER )
 	{//rockettrooper
 		if ( self->client->ps.groundEntityNum != ENTITYNUM_NONE )
@@ -7491,7 +7521,7 @@ void WP_SaberStartMissileBlockCheck( gentity_t *self, usercmd_t *ucmd  )
 					return;
 				}
 
-				if ( !g_saberAutoBlocking->integer && self->client->ps.saberBlockingTime<level.time )
+				if ( !G_PlayerBlocksAutomatically() && self->client->ps.saberBlockingTime<level.time )
 				{
 					return;
 				}
@@ -7986,7 +8016,7 @@ void WP_SaberUpdate( gentity_t *self, usercmd_t *ucmd )
 		{//FIXME: keep bbox in front of player, even when wide?
 			vec3_t	saberOrg;
 			if ( !forceBlock
-				&& ( (self->s.number&&!Jedi_SaberBusy(self)&&!g_saberRealisticCombat->integer) || (self->s.number == 0 && self->client->ps.saberBlocking == BLK_WIDE && (g_saberAutoBlocking->integer||self->client->ps.saberBlockingTime>level.time)) )
+				&& ( (self->s.number&&!Jedi_SaberBusy(self)&&!g_saberRealisticCombat->integer) || (self->s.number == 0 && self->client->ps.saberBlocking == BLK_WIDE && (G_PlayerBlocksAutomatically()||self->client->ps.saberBlockingTime>level.time)) )
 				&& self->client->ps.weaponTime <= 0
 				&& !G_InCinematicSaberAnim( self ) )
 			{//full-size blocking for non-attacking player with g_saberAutoBlocking on
@@ -8071,7 +8101,7 @@ void WP_SaberUpdate( gentity_t *self, usercmd_t *ucmd )
 				{//not doing special "alwaysBlock" bbox
 					if ( self->client->ps.weaponTime > 0
 						|| self->s.number
-						|| g_saberAutoBlocking->integer
+						|| G_PlayerBlocksAutomatically()
 						|| self->client->ps.saberBlockingTime > level.time )
 					{//if attacking or blocking (or an NPC), inflate to a minimum size
 						for ( int i = 0; i < 3; i++ )
@@ -8644,6 +8674,8 @@ void WP_ForceKnockdown( gentity_t *self, gentity_t *pusher, qboolean pull, qbool
 					self->client->ps.torsoAnimTimer += PLAYER_KNOCKDOWN_HOLD_EXTRA_TIME;
 				}
 			}
+			// Knocked-down NPCs fall as ragdolls and get back up afterwards.
+			G_Ragdoll_OnKnockdown( self );
 			//
 			if ( pusher->NPC && pusher->enemy == self )
 			{//pushed pushed down his enemy
@@ -9093,6 +9125,13 @@ void ForceThrow( gentity_t *self, qboolean pull, qboolean fake )
 	else
 	{
 		cone = forcePushCone[self->client->ps.forcePowerLevel[FP_PUSH]];
+	}
+
+	// Ragdoll corpses in front of us are flung (or yanked toward us) by the physics. Not by the fake
+	// pushes of scripted scenes, which only make their targets resist.
+	if ( !fake )
+	{
+		G_Ragdoll_ForceThrow( self, pull, self->client->ps.forcePowerLevel[pull ? FP_PULL : FP_PUSH], (float)radius, cone );
 	}
 
 	//	if ( cone >= 1.0f )
@@ -10546,6 +10585,20 @@ void ForceGrip( gentity_t *self )
 		return;
 	}
 
+	if ( G_Ragdoll_IsGrippingRagdoll( self ) )
+	{//already holding up a ragdoll corpse: keep holding it, exactly as with a living target above
+		if ( self->client->ps.forcePowerLevel[FP_GRIP] > FORCE_LEVEL_1 )
+		{
+			self->client->ps.forcePowerDuration[FP_GRIP] = level.time + 100;
+			self->client->ps.weaponTime = 1000;
+			if ( self->client->ps.forcePowersActive&(1<<FP_SPEED) )
+			{
+				self->client->ps.weaponTime = floor( self->client->ps.weaponTime * g_timescale->value );
+			}
+		}
+		return;
+	}
+
 	if ( !WP_ForcePowerUsable( self, FP_GRIP, 0 ) )
 	{//can't use it right now
 		return;
@@ -10609,12 +10662,41 @@ void ForceGrip( gentity_t *self )
 	if ( !traceEnt )
 	{//okay, trace straight ahead and see what's there
 		gi.trace( &tr, self->client->renderInfo.handLPoint, vec3_origin, vec3_origin, end, self->s.number, MASK_SHOT, (EG2_Collision)0, 0 );
-		if ( tr.entityNum >= ENTITYNUM_WORLD || tr.fraction == 1.0 || tr.allsolid || tr.startsolid )
+		if ( tr.entityNum < ENTITYNUM_WORLD && tr.fraction < 1.0 && !tr.allsolid && !tr.startsolid )
 		{
-			return;
+			traceEnt = &g_entities[tr.entityNum];
 		}
+	}
 
-		traceEnt = &g_entities[tr.entityNum];
+	if ( !traceEnt || (traceEnt->health <= 0 && traceEnt->takedamage && G_Ragdoll_OwnsBody( traceEnt )) )
+	{//nothing alive to grip, or a corpse that is one of our ragdolls (see g_ragdoll.h): lift the
+	 //ragdoll we are aiming at, if any. The game's own corpse grip below is for the other corpses.
+		if ( G_Ragdoll_ForceGripStart( self, FORCE_GRIP_DIST ) )
+		{
+			// Make sure to turn off Force Protection and Force Absorb, as for any grip.
+			if ( self->client->ps.forcePowersActive & (1 << FP_PROTECT) )
+			{
+				WP_ForcePowerStop( self, FP_PROTECT );
+			}
+			if ( self->client->ps.forcePowersActive & (1 << FP_ABSORB) )
+			{
+				WP_ForcePowerStop( self, FP_ABSORB );
+			}
+			// The physics holds the body; the power itself runs exactly as it would on a living
+			// target (same cost and duration), just without a gripped entity.
+			WP_ForcePowerStart( self, FP_GRIP, 20 );
+			if ( self->client->ps.forcePowerLevel[FP_GRIP] < FORCE_LEVEL_2 )
+			{
+				self->client->ps.forcePowerDebounce[FP_GRIP] = level.time + 250;
+				self->client->ps.forcePowerDuration[FP_GRIP] = level.time + 5000;
+			}
+			else
+			{
+				self->client->ps.forcePowerDebounce[FP_GRIP] = level.time + 1000;
+			}
+			self->s.loopSound = G_SoundIndex( "sound/weapons/force/grip.mp3" );
+		}
+		return;
 	}
 //rww - RAGDOLL_BEGIN
 #ifdef JK2_RAGDOLL_GRIPNOHEALTH
@@ -11170,6 +11252,9 @@ void ForceShootLightning( gentity_t *self )
 
 	AngleVectors( self->client->ps.viewangles, forward, NULL, NULL );
 	VectorNormalize( forward );
+
+	// Ragdoll corpses in reach convulse.
+	G_Ragdoll_ForceLightning( self, self->client->ps.forcePowerLevel[FP_LIGHTNING] );
 
 	//FIXME: if lightning hits water, do water-only-flagged radius damage from that point
 	if ( self->client->ps.forcePowerLevel[FP_LIGHTNING] > FORCE_LEVEL_2 )
@@ -13141,6 +13226,10 @@ void WP_ForcePowerStop( gentity_t *self, forcePowers_t forcePower )
 			}
 			self->s.loopSound = 0;
 			self->client->ps.forceGripEntityNum = ENTITYNUM_NONE;
+		}
+		else if ( self->s.loopSound == G_SoundIndex( "sound/weapons/force/grip.mp3" ) )
+		{//a grip that held a ragdoll corpse (see g_ragdoll.h) has no gripped entity, but its sound loops on the user
+			self->s.loopSound = 0;
 		}
 		if ( self->client->ps.torsoAnim == BOTH_FORCEGRIP_HOLD )
 		{

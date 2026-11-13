@@ -45,6 +45,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "wp_saber.h"
 #include "g_vehicles.h"
 #include "bg_pmove_momentum.h"
+#include "g_saber_guard.h"
 #include <float.h>
 
 extern qboolean G_DoDismemberment( gentity_t *self, vec3_t point, int mod, int damage, int hitLoc, qboolean force = qfalse );
@@ -9324,6 +9325,9 @@ void PM_SetSaberMove(saberMoveName_t newMove)
 			{
 				anim = BOTH_P1_S1_T_;
 			}
+			// The player's lightsaber guard holds the parry it faces, from the set for the saber
+			// style in use (see g_saber_guard.h).
+			anim = G_SaberGuard_StanceAnimation( pm->gent, anim );
 		}
 		else if ( pm->ps->saber[0].readyAnim != -1 )
 		{
@@ -14510,6 +14514,7 @@ void PM_AdjustAttackStates( pmove_t *pm )
 
 	if ( !g_saberAutoBlocking->integer
 		&& !g_saberNewControlScheme->integer
+		&& !G_SaberGuard_RulesApply()//the player's lightsaber guard replaces this manual blocking (see g_saber_guard.h)
 		&& (pm->cmd.buttons&BUTTON_FORCE_FOCUS) )
 	{
 		pm->ps->saberBlockingTime = pm->cmd.serverTime + 100;
