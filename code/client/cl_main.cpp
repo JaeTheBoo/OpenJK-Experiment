@@ -95,6 +95,7 @@ IGhoul2InfoArray &_TheGhoul2InfoArray( void ) {
 
 static void CL_ShutdownRef( qboolean restarting );
 void CL_InitRef( void );
+static qboolean	cl_rendererForceFallback;	// set while CL_InitRenderer loads the OpenGL renderer in place of one that could not start
 void CL_CheckForResend( void );
 
 /*
@@ -933,6 +934,20 @@ void CL_InitRenderer( void ) {
 	// this sets up the renderer and calls R_Init
 	re.BeginRegistration( &cls.glconfig );
 
+	if ( cls.glconfig.vidWidth == 0 && !cl_rendererForceFallback ) {
+		// the renderer could not start (Vulkan without a usable device): load the OpenGL one in its place
+		const char *why = Cvar_VariableString( "cl_rendererFailure" );
+		Com_Printf( S_COLOR_YELLOW "The renderer could not start (%s): falling back to OpenGL\n", why[0] ? why : "unknown reason" );
+		cl_rendererForceFallback = qtrue;
+		CL_ShutdownRef( qfalse );
+		CL_InitRef();
+		re.BeginRegistration( &cls.glconfig );
+		cl_rendererForceFallback = qfalse;
+	}
+	if ( cls.glconfig.vidWidth == 0 ) {
+		Com_Error( ERR_FATAL, "The renderer could not start" );
+	}
+
 	// load character sets
 	cls.charSetShader = re.RegisterShaderNoMip("gfx/2d/charsgrid_med");
 	cls.consoleFont = re.RegisterFont( "ocr_a" );
@@ -1074,11 +1089,15 @@ static CMiniHeap *GetG2VertSpaceServer( void ) {
 	return G2VertSpaceServer;
 }
 
-// NOTENOTE: If you change the output name of rd-vanilla, change this define too!
+// NOTENOTE: If you change the output name of rd-vanilla or rd-vulkan, change these defines too!
+// The Vulkan renderer is the default; the OpenGL one (vanilla) is what the game falls back to when Vulkan cannot be
+// loaded or cannot start.
 #ifdef JK2_MODE
-#define DEFAULT_RENDER_LIBRARY	"rdjosp-vanilla"
+#define DEFAULT_RENDER_LIBRARY	"rdjosp-vulkan"
+#define FALLBACK_RENDER_LIBRARY	"rdjosp-vanilla"
 #else
-#define DEFAULT_RENDER_LIBRARY	"rdsp-vanilla"
+#define DEFAULT_RENDER_LIBRARY	"rdsp-vulkan"
+#define FALLBACK_RENDER_LIBRARY	"rdsp-vanilla"
 #endif
 
 void CL_InitRef( void ) {
@@ -1089,16 +1108,24 @@ void CL_InitRef( void ) {
 
 	Com_Printf( "----- Initializing Renderer ----\n" );
     cl_renderer = Cvar_Get( "cl_renderer", DEFAULT_RENDER_LIBRARY, CVAR_ARCHIVE|CVAR_LATCH );
+	Cvar_Get( "cl_rendererFailure", "", 0 );	// (a renderer that cannot start says why here)
 
-	Com_sprintf( dllName, sizeof( dllName ), "%s_" ARCH_STRING DLL_EXT, cl_renderer->string );
-
-	if( !(rendererLib = Sys_LoadDll( dllName, qfalse )) && strcmp( cl_renderer->string, cl_renderer->resetString ) )
-	{
-		Com_Printf( "failed: trying to load fallback renderer\n" );
-		Cvar_ForceReset( "cl_renderer" );
-
-		Com_sprintf( dllName, sizeof( dllName ), DEFAULT_RENDER_LIBRARY "_" ARCH_STRING DLL_EXT );
-		rendererLib = Sys_LoadDll( dllName, qfalse );
+	// The renderer asked for, then the default one, then the OpenGL one. The saved choice is left alone when it
+	// cannot be used, so the next start tries it again.
+	const char *candidates[3] = { cl_renderer->string, DEFAULT_RENDER_LIBRARY, FALLBACK_RENDER_LIBRARY };
+	if ( cl_rendererForceFallback ) {
+		candidates[0] = FALLBACK_RENDER_LIBRARY;
+		candidates[1] = NULL;
+		candidates[2] = NULL;
+	}
+	for ( int i = 0; i < 3 && !rendererLib; i++ ) {
+		if ( !candidates[i] || ( i > 0 && !Q_stricmp( candidates[i], candidates[i - 1] ) ) ) {
+			continue;
+		}
+		Com_sprintf( dllName, sizeof( dllName ), "%s_" ARCH_STRING DLL_EXT, candidates[i] );
+		if ( ( rendererLib = Sys_LoadDll( dllName, qfalse ) ) == NULL ) {
+			Com_Printf( "failed to load renderer \"%s\"\n", candidates[i] );
+		}
 	}
 
 	if ( !rendererLib ) {
@@ -1166,6 +1193,9 @@ void CL_InitRef( void ) {
     rit.WIN_Present = WIN_Present;
 	rit.GL_GetProcAddress = WIN_GL_GetProcAddress;
 	rit.GL_ExtensionSupported = WIN_GL_ExtensionSupported;
+	rit.VK_GetInstanceExtensions = WIN_Vulkan_GetInstanceExtensions;
+	rit.VK_CreateSurface = WIN_Vulkan_CreateSurface;
+	rit.VK_GetDrawableSize = WIN_Vulkan_GetDrawableSize;
 
 	rit.PD_Load = PD_Load;
 	rit.PD_Store = PD_Store;

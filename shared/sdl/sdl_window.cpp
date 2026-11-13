@@ -21,6 +21,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #include <SDL.h>
 #include <SDL_syswm.h>
+#include <SDL_vulkan.h>
 #include "qcommon/qcommon.h"
 #include "rd-common/tr_types.h"
 #include "sys/sys_local.h"
@@ -330,6 +331,11 @@ static rserr_t GLimp_SetMode(glconfig_t *glConfig, const windowDesc_t *windowDes
 	if ( windowDesc->api == GRAPHICS_API_OPENGL )
 	{
 		flags |= SDL_WINDOW_OPENGL;
+	}
+	else if ( windowDesc->api == GRAPHICS_API_VULKAN )
+	{
+		// a regular window; the renderer makes the Vulkan instance and surface itself
+		flags |= SDL_WINDOW_VULKAN;
 	}
 
 	Com_Printf( "Initializing display\n");
@@ -655,6 +661,11 @@ static rserr_t GLimp_SetMode(glconfig_t *glConfig, const windowDesc_t *windowDes
 
 	SDL_FreeSurface( icon );
 
+	if ( windowDesc->api == GRAPHICS_API_VULKAN && screen == NULL )
+	{
+		return RSERR_UNKNOWN;
+	}
+
 	if (!GLimp_DetectAvailableModes())
 	{
 		return RSERR_UNKNOWN;
@@ -897,4 +908,38 @@ void *WIN_GL_GetProcAddress( const char *proc )
 qboolean WIN_GL_ExtensionSupported( const char *extension )
 {
 	return SDL_GL_ExtensionSupported( extension ) == SDL_TRUE ? qtrue : qfalse;
+}
+
+const char *const *WIN_Vulkan_GetInstanceExtensions( unsigned int *count )
+{
+	// SDL2 fills a caller's array; the list stays valid for as long as the window does
+	static const char *extensions[32];
+	unsigned int n = ARRAY_LEN( extensions );
+
+	*count = 0;
+	if ( !screen || !SDL_Vulkan_GetInstanceExtensions( screen, &n, extensions ) )
+	{
+		Com_DPrintf( "SDL_Vulkan_GetInstanceExtensions failed: %s\n", SDL_GetError() );
+		return NULL;
+	}
+	*count = n;
+	return extensions;
+}
+
+qboolean WIN_Vulkan_CreateSurface( void *instance, void *surface )
+{
+	if ( !screen )
+	{
+		return qfalse;
+	}
+	return SDL_Vulkan_CreateSurface( screen, (VkInstance)instance, (VkSurfaceKHR *)surface ) == SDL_TRUE ? qtrue : qfalse;
+}
+
+void WIN_Vulkan_GetDrawableSize( int *width, int *height )
+{
+	*width = *height = 0;
+	if ( screen )
+	{
+		SDL_Vulkan_GetDrawableSize( screen, width, height );
+	}
 }

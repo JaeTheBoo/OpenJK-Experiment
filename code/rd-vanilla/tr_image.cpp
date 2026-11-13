@@ -27,6 +27,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "../server/exe_headers.h"
 
 #include "tr_local.h"
+#include "jobs/jobs.h"
+#include "renderer/tr_mip_lanczos.h"
 #include "../rd-common/tr_common.h"
 #include <png.h>
 #include <map>
@@ -408,52 +410,76 @@ Uses temp mem, but then copies back to input, quartering the size of the texture
 Proper linear filter
 ================
 */
-static void R_MipMap2( unsigned *in, int inWidth, int inHeight ) {
-	int			i, j, k;
-	byte		*outpix;
-	int			inWidthMask, inHeightMask;
-	int			total;
-	int			outWidth, outHeight;
-	unsigned	*temp;
+// The filter of R_MipMap2 is the product of two 1 2 2 1 filters (36 in all), so it is done as two passes of four
+// taps instead of one of sixteen, and the rows of each pass are shared between the worker threads.
+typedef struct mipMapJob_s {
+	const byte	*in;
+	unsigned short	*horizontal;	// inHeight rows of outWidth pixels, 4 sums each
+	byte		*out;
+	int			inWidth, inHeight, outWidth, outHeight;
+} mipMapJob_t;
 
-	outWidth = inWidth >> 1;
-	outHeight = inHeight >> 1;
-	temp = (unsigned int *) R_Malloc( outWidth * outHeight * 4, TAG_TEMP_WORKSPACE, qfalse );
+static void R_MipMapHorizontal( int begin, int end, void *context ) {
+	const mipMapJob_t *job = (const mipMapJob_t *)context;
+	const int mask = job->inWidth - 1;
 
-	inWidthMask = inWidth - 1;
-	inHeightMask = inHeight - 1;
-
-	for ( i = 0 ; i < outHeight ; i++ ) {
-		for ( j = 0 ; j < outWidth ; j++ ) {
-			outpix = (byte *) ( temp + i * outWidth + j );
-			for ( k = 0 ; k < 4 ; k++ ) {
-				total =
-					1 * ((byte *)&in[ ((i*2-1)&inHeightMask)*inWidth + ((j*2-1)&inWidthMask) ])[k] +
-					2 * ((byte *)&in[ ((i*2-1)&inHeightMask)*inWidth + ((j*2)&inWidthMask) ])[k] +
-					2 * ((byte *)&in[ ((i*2-1)&inHeightMask)*inWidth + ((j*2+1)&inWidthMask) ])[k] +
-					1 * ((byte *)&in[ ((i*2-1)&inHeightMask)*inWidth + ((j*2+2)&inWidthMask) ])[k] +
-
-					2 * ((byte *)&in[ ((i*2)&inHeightMask)*inWidth + ((j*2-1)&inWidthMask) ])[k] +
-					4 * ((byte *)&in[ ((i*2)&inHeightMask)*inWidth + ((j*2)&inWidthMask) ])[k] +
-					4 * ((byte *)&in[ ((i*2)&inHeightMask)*inWidth + ((j*2+1)&inWidthMask) ])[k] +
-					2 * ((byte *)&in[ ((i*2)&inHeightMask)*inWidth + ((j*2+2)&inWidthMask) ])[k] +
-
-					2 * ((byte *)&in[ ((i*2+1)&inHeightMask)*inWidth + ((j*2-1)&inWidthMask) ])[k] +
-					4 * ((byte *)&in[ ((i*2+1)&inHeightMask)*inWidth + ((j*2)&inWidthMask) ])[k] +
-					4 * ((byte *)&in[ ((i*2+1)&inHeightMask)*inWidth + ((j*2+1)&inWidthMask) ])[k] +
-					2 * ((byte *)&in[ ((i*2+1)&inHeightMask)*inWidth + ((j*2+2)&inWidthMask) ])[k] +
-
-					1 * ((byte *)&in[ ((i*2+2)&inHeightMask)*inWidth + ((j*2-1)&inWidthMask) ])[k] +
-					2 * ((byte *)&in[ ((i*2+2)&inHeightMask)*inWidth + ((j*2)&inWidthMask) ])[k] +
-					2 * ((byte *)&in[ ((i*2+2)&inHeightMask)*inWidth + ((j*2+1)&inWidthMask) ])[k] +
-					1 * ((byte *)&in[ ((i*2+2)&inHeightMask)*inWidth + ((j*2+2)&inWidthMask) ])[k];
-				outpix[k] = total / 36;
+	for ( int y = begin ; y < end ; y++ ) {
+		const byte *row = job->in + (size_t)y * job->inWidth * 4;
+		unsigned short *out = job->horizontal + (size_t)y * job->outWidth * 4;
+		for ( int j = 0 ; j < job->outWidth ; j++, out += 4 ) {
+			const byte *a = row + ( ( j * 2 - 1 ) & mask ) * 4;
+			const byte *b = row + ( ( j * 2 ) & mask ) * 4;
+			const byte *c = row + ( ( j * 2 + 1 ) & mask ) * 4;
+			const byte *d = row + ( ( j * 2 + 2 ) & mask ) * 4;
+			for ( int k = 0 ; k < 4 ; k++ ) {
+				out[k] = (unsigned short)( a[k] + 2 * b[k] + 2 * c[k] + d[k] );
 			}
 		}
 	}
+}
 
-	memcpy( in, temp, outWidth * outHeight * 4 );
-	R_Free( temp );
+static void R_MipMapVertical( int begin, int end, void *context ) {
+	const mipMapJob_t *job = (const mipMapJob_t *)context;
+	const int mask = job->inHeight - 1;
+	const size_t stride = (size_t)job->outWidth * 4;
+
+	for ( int i = begin ; i < end ; i++ ) {
+		const unsigned short *a = job->horizontal + (size_t)( ( i * 2 - 1 ) & mask ) * stride;
+		const unsigned short *b = job->horizontal + (size_t)( ( i * 2 ) & mask ) * stride;
+		const unsigned short *c = job->horizontal + (size_t)( ( i * 2 + 1 ) & mask ) * stride;
+		const unsigned short *d = job->horizontal + (size_t)( ( i * 2 + 2 ) & mask ) * stride;
+		byte *out = job->out + (size_t)i * stride;
+		for ( size_t n = 0 ; n < stride ; n++ ) {
+			out[n] = (byte)( ( a[n] + 2 * b[n] + 2 * c[n] + d[n] ) / 36 );
+		}
+	}
+}
+
+static void R_MipMap2( unsigned *in, int inWidth, int inHeight ) {
+	const int outWidth = inWidth >> 1;
+	const int outHeight = inHeight >> 1;
+
+	if ( outWidth <= 0 || outHeight <= 0 ) {
+		return;
+	}
+
+	mipMapJob_t job;
+	job.in = (const byte *)in;
+	job.inWidth = inWidth;
+	job.inHeight = inHeight;
+	job.outWidth = outWidth;
+	job.outHeight = outHeight;
+	job.horizontal = (unsigned short *) R_Malloc( (size_t)outWidth * inHeight * 4 * sizeof( unsigned short ), TAG_TEMP_WORKSPACE, qfalse );
+	job.out = (byte *) R_Malloc( outWidth * outHeight * 4, TAG_TEMP_WORKSPACE, qfalse );
+
+	// (small levels are done by this thread alone, waking the workers costs more than they save)
+	const int rowsPerPiece = Q_max( 8192 / Q_max( inWidth, 1 ), 1 );
+	Jobs::ParallelFor( inHeight, rowsPerPiece, R_MipMapHorizontal, &job );
+	Jobs::ParallelFor( outHeight, rowsPerPiece, R_MipMapVertical, &job );
+
+	memcpy( in, job.out, outWidth * outHeight * 4 );
+	R_Free( job.out );
+	R_Free( job.horizontal );
 }
 
 /*
@@ -469,6 +495,13 @@ static void R_MipMap (byte *in, int width, int height) {
 	int		row;
 
 	if ( width == 1 && height == 1 ) {
+		return;
+	}
+
+	if ( r_simpleMipMaps->integer >= 2 && width >= 2 && height >= 2 && !( width & ( width - 1 ) ) && !( height & ( height - 1 ) ) ) {
+		float *temp = (float *) R_Malloc( R_MipMapLanczosTempSize( width, height ), TAG_TEMP_WORKSPACE, qfalse );
+		R_MipMapLanczos( in, width, height, temp );
+		R_Free( temp );
 		return;
 	}
 
@@ -708,6 +741,9 @@ static void Upload32( unsigned *data,
 		    int		miplevel;
 
 		    miplevel = 0;
+		    // a cut-out texture keeps the share of it the alpha test keeps (tr_mip_lanczos.h)
+		    const bool cutout = r_simpleMipMaps->integer >= 2 && R_MipAlphaIsCutout( (const byte *)data, width * height );
+		    const float coverage = cutout ? R_MipAlphaCoverage( (const byte *)data, width * height ) : 0.0f;
 		    while (width > 1 || height > 1)
 		    {
 			    R_MipMap( (byte *)data, width, height );
@@ -718,6 +754,10 @@ static void Upload32( unsigned *data,
 			    if (height < 1)
 				    height = 1;
 			    miplevel++;
+
+			    if ( cutout ) {
+			    	R_MipKeepAlphaCoverage( (byte *)data, width * height, coverage );
+			    }
 
 			    if ( r_colorMipLevels->integer )
 			    {
@@ -847,11 +887,26 @@ void R_Images_DeleteImage(image_t *pImage)
 	}
 }
 
+// The glow images R_CreateBuiltinImages made last. Kept here as tr is cleared before it runs again (by R_Init, and as a
+// level loads before RE_SVModelInit), which lost the ones in tr: each load left three behind, two of the window's size.
+static GLuint glowImages[3];
+
+static void R_DeleteGlowImages( void )
+{
+	if ( glowImages[0] )
+	{
+		qglDeleteTextures( 3, glowImages );
+		memset( glowImages, 0, sizeof( glowImages ) );
+	}
+}
+
 // called only at app startup, vid_restart, app-exit
 //
 void R_Images_Clear(void)
 {
 	image_t *pImage;
+
+	R_DeleteGlowImages();
 	//	int iNumImages =
 	   				  R_Images_StartIteration();
 	while ( (pImage = R_Images_GetNextIteration()) != NULL)
@@ -1329,6 +1384,7 @@ void R_CreateBuiltinImages( void ) {
 
 	tr.screenImage = R_CreateImage("*screen", (byte *)data, 8, 8, GL_RGBA, qfalse, qfalse, qfalse, GL_REPEAT );
 
+	R_DeleteGlowImages();
 
 	// Create the scene glow image. - AReis
 	tr.screenGlow = 1024 + giTextureBindNum++;
@@ -1368,6 +1424,9 @@ void R_CreateBuiltinImages( void ) {
 	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
 	qglDisable( GL_TEXTURE_RECTANGLE_ARB );
 	qglEnable( GL_TEXTURE_2D );
+	glowImages[0] = tr.screenGlow;
+	glowImages[1] = tr.sceneImage;
+	glowImages[2] = tr.blurImage;
 
 
 	// with overbright bits active, we need an image which is some fraction of full color,
@@ -1412,11 +1471,8 @@ void R_SetColorMappings( void ) {
 		tr.overbrightBits = 0;		// need hardware gamma for overbright
 	}
 
-	// never overbright in windowed mode
-	if ( !glConfig.isFullscreen )
-	{
-		tr.overbrightBits = 0;
-	}
+	// (the original never used overbright in a window, where the gamma ramps would have changed the whole desktop;
+	// the pass that does it now, RB_GammaPass, changes only the game's picture)
 
 	if ( tr.overbrightBits > 1 ) {
 		tr.overbrightBits = 1;

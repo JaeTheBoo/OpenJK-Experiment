@@ -27,6 +27,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "../server/exe_headers.h"
 
 #include "tr_local.h"
+#include "jobs/jobs.h"
 #include "../rd-common/tr_common.h"
 #include "tr_stl.h"
 #include "../rd-common/tr_font.h"
@@ -71,6 +72,7 @@ cvar_t	*r_nocurves;
 
 cvar_t	*r_dlightStyle;
 cvar_t	*r_surfaceSprites;
+cvar_t	*r_surfaceSpriteRange;
 cvar_t	*r_surfaceWeather;
 
 cvar_t	*r_windSpeed;
@@ -85,12 +87,28 @@ cvar_t	*r_allowExtensions;
 
 cvar_t	*r_ext_compressed_textures;
 cvar_t	*r_ext_compressed_lightmaps;
+cvar_t	*r_smoothLightmaps;
 cvar_t	*r_ext_preferred_tc_method;
 cvar_t	*r_ext_gamma_control;
 cvar_t	*r_ext_multitexture;
 cvar_t	*r_ext_compiled_vertex_array;
 cvar_t	*r_ext_texture_env_add;
 cvar_t	*r_ext_texture_filter_anisotropic;
+cvar_t	*r_glsl;
+cvar_t	*r_dlightGLSL;
+cvar_t	*r_postDebug;
+cvar_t	*r_ssao;
+cvar_t	*r_ssaoRadius;
+cvar_t	*r_ssaoStrength;
+cvar_t	*r_bloom;
+cvar_t	*r_bloomThreshold;
+cvar_t	*r_bloomIntensity;
+cvar_t	*r_sharpen;
+cvar_t	*r_lightShafts;
+cvar_t	*r_eyeAdaptation;
+cvar_t	*r_smaa;
+cvar_t	*r_alphaToCoverage;
+cvar_t	*r_sampleShading;
 
 cvar_t	*r_DynamicGlow;
 cvar_t	*r_DynamicGlowPasses;
@@ -111,6 +129,12 @@ cvar_t	*r_lightmap;
 cvar_t	*r_vertexLight;
 cvar_t	*r_shadows;
 cvar_t	*r_shadowRange;
+cvar_t	*r_shadowSoftness;
+cvar_t	*r_shadowSamples;
+cvar_t	*r_shadowStrength;
+cvar_t	*r_shadowTilt;
+cvar_t	*r_shadowSelf;
+cvar_t	*r_shadowMaps;
 cvar_t	*r_flares;
 cvar_t	*r_nobind;
 cvar_t	*r_singleShader;
@@ -149,6 +173,7 @@ cvar_t	*r_debugSort;
 cvar_t	*r_debugStyle;
 
 cvar_t	*r_modelpoolmegs;
+cvar_t	*r_wideUI;
 
 cvar_t	*r_noGhoul2;
 cvar_t	*r_Ghoul2AnimSmooth;
@@ -190,6 +215,7 @@ PFNGLSTENCILOPSEPARATEPROC qglStencilOpSeparate;
 #endif
 
 PFNGLACTIVETEXTUREARBPROC qglActiveTextureARB;
+PFNGLMINSAMPLESHADINGARBPROC qglMinSampleShadingARB;
 PFNGLCLIENTACTIVETEXTUREARBPROC qglClientActiveTextureARB;
 PFNGLMULTITEXCOORD2FARBPROC qglMultiTexCoord2fARB;
 
@@ -455,6 +481,23 @@ static void GLimp_InitExtensions( void )
 		ri.Cvar_Set( "r_ext_texture_filter_anisotropic_avail", "0" );
 	}
 
+	// GL_ARB_sample_shading (shades every sample of a multisampled pixel instead of once per pixel, which also
+	// antialiases the textures and the alpha tested edges, at the cost of speed)
+	qglMinSampleShadingARB = NULL;
+	if ( ri.GL_ExtensionSupported( "GL_ARB_sample_shading" ) )
+	{
+		qglMinSampleShadingARB = ( PFNGLMINSAMPLESHADINGARBPROC ) ri.GL_GetProcAddress( "glMinSampleShadingARB" );
+		if ( !qglMinSampleShadingARB )
+		{
+			qglMinSampleShadingARB = ( PFNGLMINSAMPLESHADINGARBPROC ) ri.GL_GetProcAddress( "glMinSampleShading" );
+		}
+		Com_Printf ("...GL_ARB_sample_shading %s\n", qglMinSampleShadingARB ? "available" : "found, but its entry point is missing" );
+	}
+	else
+	{
+		Com_Printf ("...GL_ARB_sample_shading not found\n" );
+	}
+
 	// GL_EXT_clamp_to_edge
 	glConfig.clampToEdgeAvailable = qtrue;
 	Com_Printf ("...using GL_EXT_texture_edge_clamp\n" );
@@ -673,6 +716,13 @@ static void GLimp_InitExtensions( void )
 		ri.Cvar_Set( "r_DynamicGlow","0" );
 	}
 
+	R_GLSL_Init();
+	R_Post_Init();
+
+	// SDL3 has no gamma ramps; a pass over the finished picture does what they did (brightness, overbright), so the
+	// rest of the renderer treats it as hardware gamma (RB_GammaPass)
+	glConfig.deviceSupportsGamma = R_Post_GammaAvailable();
+
 #if !defined(__APPLE__)
 	qglStencilOpSeparate = (PFNGLSTENCILOPSEPARATEPROC)ri.GL_GetProcAddress("glStencilOpSeparate");
 	if (qglStencilOpSeparate)
@@ -692,7 +742,7 @@ static void GLimp_InitExtensions( void )
 ** setting variables, checking GL constants, and reporting the gfx system config
 ** to the user.
 */
-static void InitOpenGL( void )
+static qboolean InitOpenGL( void )
 {
 	//
 	// initialize OS specific portions of the renderer
@@ -707,11 +757,28 @@ static void InitOpenGL( void )
 
 	if ( glConfig.vidWidth == 0 )
 	{
+#ifdef RD_VULKAN
+		windowDesc_t windowDesc = { GRAPHICS_API_VULKAN };
+#else
 		windowDesc_t windowDesc = { GRAPHICS_API_OPENGL };
+#endif
 		memset(&glConfig, 0, sizeof(glConfig));
 
 		window = ri.WIN_Init(&windowDesc, &glConfig);
 
+#ifdef RD_VULKAN
+		if ( glConfig.vidWidth == 0 )
+		{
+			return qfalse;	// (no window for Vulkan: the engine loads the OpenGL renderer)
+		}
+		// Vulkan device, swapchain and the capabilities the renderer asks glConfig about
+		if ( !VK_Init( &glConfig ) )
+		{
+			// (no usable Vulkan: the engine sees a size of 0 and loads the OpenGL renderer)
+			glConfig.vidWidth = 0;
+			return qfalse;
+		}
+#else
 		// get our config strings
 		glConfig.vendor_string = (const char *)qglGetString (GL_VENDOR);
 		glConfig.renderer_string = (const char *)qglGetString (GL_RENDERER);
@@ -726,6 +793,7 @@ static void InitOpenGL( void )
 
 		// initialize extensions
 		GLimp_InitExtensions( );
+#endif
 
 		// set default state
 		GL_SetDefaultState();
@@ -736,6 +804,7 @@ static void InitOpenGL( void )
 		// set default state
 		GL_SetDefaultState();
 	}
+	return qtrue;
 }
 
 /*
@@ -1176,6 +1245,26 @@ void GL_SetDefaultState( void )
 	qglDisable( GL_BLEND );
 	qglDisable( GL_ALPHA_TEST );
 	qglBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+
+	//
+	// multisampling: ask what the frame buffer really has, the display may have given fewer samples than were wanted
+	//
+	GLint samples = 0;
+	qglGetIntegerv( GL_SAMPLES, &samples );
+	glState.msaaSamples = samples > 1 ? samples : 0;
+	glState.alphaToCoverage = (qboolean)( glState.msaaSamples && r_alphaToCoverage->integer );
+	glState.alphaToCoverageOn = qfalse;
+	if ( glState.msaaSamples )
+	{
+		qglEnable( GL_MULTISAMPLE );
+		qglDisable( GL_SAMPLE_ALPHA_TO_COVERAGE );
+
+		if ( qglMinSampleShadingARB && r_sampleShading->value > 0.0f )
+		{
+			qglMinSampleShadingARB( r_sampleShading->value );
+			qglEnable( GL_SAMPLE_SHADING_ARB );
+		}
+	}
 }
 
 
@@ -1330,6 +1419,15 @@ void GfxInfo_f( void )
 			ri.Printf( PRINT_ALL, "%i)\n", (int)glConfig.maxTextureFilterAnisotropy);
 		else
 			ri.Printf( PRINT_ALL, "%f)\n", glConfig.maxTextureFilterAnisotropy);
+	}
+	if ( glState.msaaSamples )
+	{
+		ri.Printf( PRINT_ALL, "multisampling: %dx%s%s\n", glState.msaaSamples, glState.alphaToCoverage ? ", alpha to coverage" : "",
+			( qglMinSampleShadingARB && r_sampleShading->value > 0.0f ) ? va( ", sample shading %.2f", r_sampleShading->value ) : "" );
+	}
+	else
+	{
+		ri.Printf( PRINT_ALL, "multisampling: %s\n", enablestrings[0] );
 	}
 	ri.Printf( PRINT_ALL, "Dynamic Glow: %s\n", enablestrings[r_DynamicGlow->integer ? 1 : 0] );
 	if (g_bTextureRectangleHack) Com_Printf ("Dynamic Glow ATI BAD DRIVER HACK %s\n", enablestrings[g_bTextureRectangleHack] );
@@ -1515,12 +1613,32 @@ void R_Register( void )
 	r_allowExtensions = ri.Cvar_Get( "r_allowExtensions", "1", CVAR_ARCHIVE_ND | CVAR_LATCH );
 	r_ext_compressed_textures = ri.Cvar_Get( "r_ext_compress_textures", "1", CVAR_ARCHIVE_ND | CVAR_LATCH );
 	r_ext_compressed_lightmaps = ri.Cvar_Get( "r_ext_compress_lightmaps", "0", CVAR_ARCHIVE_ND | CVAR_LATCH );
+	r_smoothLightmaps = ri.Cvar_Get( "r_smoothLightmaps", "1", CVAR_ARCHIVE_ND | CVAR_LATCH );	// 1 = lightmaps made larger with a bicubic filter as the level loads (tr_lightmap_smooth.h)
 	r_ext_preferred_tc_method = ri.Cvar_Get( "r_ext_preferred_tc_method", "0", CVAR_ARCHIVE_ND | CVAR_LATCH );
 	r_ext_gamma_control = ri.Cvar_Get( "r_ext_gamma_control", "1", CVAR_ARCHIVE_ND | CVAR_LATCH );
 	r_ext_multitexture = ri.Cvar_Get( "r_ext_multitexture", "1", CVAR_ARCHIVE_ND | CVAR_LATCH );
 	r_ext_compiled_vertex_array = ri.Cvar_Get( "r_ext_compiled_vertex_array", "1", CVAR_ARCHIVE_ND | CVAR_LATCH);
 	r_ext_texture_env_add = ri.Cvar_Get( "r_ext_texture_env_add", "1", CVAR_ARCHIVE_ND | CVAR_LATCH);
 	r_ext_texture_filter_anisotropic = ri.Cvar_Get( "r_ext_texture_filter_anisotropic", "16", CVAR_ARCHIVE_ND );
+	r_alphaToCoverage = ri.Cvar_Get( "r_alphaToCoverage", "1", CVAR_ARCHIVE_ND );	// smooth the edges of alpha tested surfaces (leaves, fences...) when multisampling
+	r_sampleShading = ri.Cvar_Get( "r_sampleShading", "0", CVAR_ARCHIVE_ND | CVAR_LATCH );	// 0 off, up to 1 = shade every sample (needs GL_ARB_sample_shading, slow)
+	ri.Cvar_CheckRange( r_sampleShading, 0, 1, qfalse );
+	r_glsl = ri.Cvar_Get( "r_glsl", "1", CVAR_ARCHIVE_ND | CVAR_LATCH );	// use GLSL shader programs where the renderer has them (needs OpenGL 2.0)
+	Jobs::SetThreads( ri.Cvar_Get( "com_jobThreads", "-1", CVAR_ARCHIVE_ND )->integer );	// (the renderer has a pool of its own, see docs/parallel-work.md)
+	r_dlightGLSL = ri.Cvar_Get( "r_dlightGLSL", "0", CVAR_ARCHIVE_ND );	// 1 = dynamic lights as a shader pass that lights every pixel by distance and surface angle (needs r_glsl), 2 = and by the bumps of the surface texture
+	r_postDebug = ri.Cvar_Get( "r_postDebug", "0", 0 );	// 1 = run the post processing plumbing with no effect, the picture must not change
+	r_ssao = ri.Cvar_Get( "r_ssao", "0", CVAR_ARCHIVE_ND );	// 1 = ambient occlusion, darkens corners and where things meet (needs r_glsl)
+	r_ssaoRadius = ri.Cvar_Get( "r_ssaoRadius", "48", CVAR_ARCHIVE_ND );	// how far from a pixel, in units, a surface still shades it
+	r_ssaoStrength = ri.Cvar_Get( "r_ssaoStrength", "2", CVAR_ARCHIVE_ND );
+	r_bloom = ri.Cvar_Get( "r_bloom", "0", CVAR_ARCHIVE_ND );	// 1 = a soft glow around the bright parts of the picture (needs r_glsl)
+	r_bloomThreshold = ri.Cvar_Get( "r_bloomThreshold", "0.8", CVAR_ARCHIVE_ND );	// how bright, 0 to 1, a pixel has to be to glow
+	r_bloomIntensity = ri.Cvar_Get( "r_bloomIntensity", "0.5", CVAR_ARCHIVE_ND );
+	r_sharpen = ri.Cvar_Get( "r_sharpen", "0", CVAR_ARCHIVE_ND );	// contrast adaptive sharpening of the 3D view, 0 (off) to 1
+	ri.Cvar_Get( "r_softParticles", "1", CVAR_ARCHIVE_ND );	// (read where they are drawn: RB_StageIsSoft; made here for the menu)
+	ri.Cvar_Get( "r_lampLighting", "1", CVAR_ARCHIVE_ND );	// (and R_LampLighting)
+	r_lightShafts = ri.Cvar_Get( "r_lightShafts", "0", CVAR_ARCHIVE_ND );	// rays of sunlight over the 3D view, on levels with a sun: 0 (off), 1 (normal) to 2
+	r_eyeAdaptation = ri.Cvar_Get( "r_eyeAdaptation", "0", CVAR_ARCHIVE_ND );	// the 3D view brightens in dark places, dims in bright ones: 0 (off), 1 (normal) to 2
+	r_smaa = ri.Cvar_Get( "r_smaa", "0", CVAR_ARCHIVE_ND );	// 1 = SMAA, smooths edges without softening the rest of the picture (needs OpenGL 3.3)
 
 	r_DynamicGlow = ri.Cvar_Get( "r_DynamicGlow", "0", CVAR_ARCHIVE_ND );
 	r_DynamicGlowPasses = ri.Cvar_Get( "r_DynamicGlowPasses", "5", CVAR_ARCHIVE_ND );
@@ -1538,7 +1656,8 @@ void R_Register( void )
 	r_texturebitslm = ri.Cvar_Get( "r_texturebitslm", "0", CVAR_ARCHIVE_ND | CVAR_LATCH );
 	r_overBrightBits = ri.Cvar_Get ("r_overBrightBits", "0", CVAR_ARCHIVE_ND | CVAR_LATCH );
 	r_mapOverBrightBits = ri.Cvar_Get( "r_mapOverBrightBits", "0", CVAR_ARCHIVE_ND|CVAR_LATCH );
-	r_simpleMipMaps = ri.Cvar_Get( "r_simpleMipMaps", "1", CVAR_ARCHIVE_ND | CVAR_LATCH );
+	r_simpleMipMaps = ri.Cvar_Get( "r_simpleMipMaps", "2", CVAR_ARCHIVE_ND | CVAR_LATCH );	// how the smaller mip levels are made: 0 blur, 1 box (original), 2 Lanczos
+	ri.Cvar_CheckRange( r_simpleMipMaps, 0, 2, qtrue );
 	r_vertexLight = ri.Cvar_Get( "r_vertexLight", "0", CVAR_ARCHIVE | CVAR_LATCH );
 	r_subdivisions = ri.Cvar_Get ("r_subdivisions", "4", CVAR_ARCHIVE_ND | CVAR_LATCH);
 	ri.Cvar_CheckRange( r_subdivisions, 0, 80, qfalse );
@@ -1556,7 +1675,7 @@ void R_Register( void )
 	r_lodCurveError = ri.Cvar_Get( "r_lodCurveError", "250", CVAR_ARCHIVE_ND );
 	r_lodbias = ri.Cvar_Get( "r_lodbias", "0", CVAR_ARCHIVE_ND );
 	r_flares = ri.Cvar_Get ("r_flares", "1", CVAR_ARCHIVE_ND );
-	r_lodscale = ri.Cvar_Get( "r_lodscale", "10", CVAR_ARCHIVE_ND );
+	r_lodscale = ri.Cvar_Get( "r_lodscale", "20", CVAR_ARCHIVE_ND );
 
 	r_znear = ri.Cvar_Get( "r_znear", "4", CVAR_ARCHIVE_ND );	//if set any lower, you lose a lot of precision in the distance
 	ri.Cvar_CheckRange( r_znear, 0.001f, 10, qfalse ); // was qtrue in JA, is qfalse properly in ioq3
@@ -1573,6 +1692,7 @@ void R_Register( void )
 
 	r_dlightStyle = ri.Cvar_Get ("r_dlightStyle", "1", CVAR_ARCHIVE_ND);
 	r_surfaceSprites = ri.Cvar_Get ("r_surfaceSprites", "1", CVAR_ARCHIVE_ND);
+	r_surfaceSpriteRange = ri.Cvar_Get ("r_surfaceSpriteRange", "3", CVAR_ARCHIVE_ND);	// multiplies the fade distances of grass, bushes and the like
 	r_surfaceWeather = ri.Cvar_Get ("r_surfaceWeather", "0", CVAR_TEMP);
 
 	r_windSpeed = ri.Cvar_Get ("r_windSpeed", "0", 0);
@@ -1632,7 +1752,13 @@ void R_Register( void )
 	r_lockpvs = ri.Cvar_Get ("r_lockpvs", "0", CVAR_CHEAT);
 	r_noportals = ri.Cvar_Get ("r_noportals", "0", CVAR_CHEAT);
 	r_shadows = ri.Cvar_Get( "cg_shadows", "1", 0 );
-	r_shadowRange = ri.Cvar_Get( "r_shadowRange", "1000", CVAR_ARCHIVE_ND );
+	r_shadowRange = ri.Cvar_Get( "r_shadowRange", "2000", CVAR_ARCHIVE_ND );
+	r_shadowSoftness = ri.Cvar_Get( "r_shadowSoftness", "1", CVAR_ARCHIVE_ND );
+	r_shadowSamples = ri.Cvar_Get( "r_shadowSamples", "8", CVAR_ARCHIVE_ND );
+	r_shadowStrength = ri.Cvar_Get( "r_shadowStrength", "1", CVAR_ARCHIVE_ND );
+	r_shadowTilt = ri.Cvar_Get( "r_shadowTilt", "1", CVAR_ARCHIVE_ND );
+	r_shadowSelf = ri.Cvar_Get( "r_shadowSelf", "0", CVAR_ARCHIVE_ND );
+	r_shadowMaps = ri.Cvar_Get( "r_shadowMaps", "0", CVAR_ARCHIVE_ND );	// 1 = cg_shadows 2 draws shadow maps too (as cg_shadows 4 does)
 
 /*
 Ghoul2 Insert Start
@@ -1672,6 +1798,7 @@ Ghoul2 Insert End
 	com_buildScript = ri.Cvar_Get ( "com_buildScript", "0", 0 );
 
 	r_modelpoolmegs = ri.Cvar_Get("r_modelpoolmegs", "20", CVAR_ARCHIVE);
+	r_wideUI = ri.Cvar_Get("r_wideUI", "1", CVAR_ARCHIVE|CVAR_LATCH);
 	if (ri.LowPhysicalMemory() )
 	{
 		ri.Cvar_Set("r_modelpoolmegs", "0");
@@ -1700,7 +1827,7 @@ R_Init
 ===============
 */
 extern void R_InitWorldEffects();
-void R_Init( void ) {
+qboolean R_Init( void ) {
 	int	err;
 	int i;
 
@@ -1759,7 +1886,10 @@ void R_Init( void ) {
 		byteAlias_t *ba = (byteAlias_t *)&color;
 		RE_SetLightStyle( i, ba->i );
 	}
-	InitOpenGL();
+	if ( !InitOpenGL() )
+	{
+		return qfalse;
+	}
 
 	R_InitImages();
 	R_InitShaders();
@@ -1777,6 +1907,7 @@ void R_Init( void ) {
 	GfxInfo_f();
 
 	//ri.Printf( PRINT_ALL, "----- finished R_Init -----\n" );
+	return qtrue;
 }
 
 /*
@@ -1789,7 +1920,7 @@ void RE_Shutdown( qboolean destroyWindow, qboolean restarting ) {
 	for ( size_t i = 0; i < numCommands; i++ )
 		ri.Cmd_RemoveCommand( commands[i].cmd );
 
-	if ( r_DynamicGlow && r_DynamicGlow->integer )
+	if ( tr.registered && r_DynamicGlow && r_DynamicGlow->integer )
 	{
 		// Release the Glow Vertex Shader.
 		if ( tr.glowVShader )
@@ -1840,6 +1971,11 @@ void RE_Shutdown( qboolean destroyWindow, qboolean restarting ) {
 
 	// shut down platform specific OpenGL stuff
 	if ( destroyWindow ) {
+		R_ImagePrefetch_Shutdown();
+		Jobs::GetPool().Stop();	// before the module is unloaded (see Pool::Stop)
+#ifdef RD_VULKAN
+		VK_Shutdown();
+#endif
 		ri.WIN_Shutdown();
 	}
 	tr.registered = qfalse;
@@ -2019,10 +2155,12 @@ extern "C" Q_EXPORT refexport_t* QDECL GetRefAPI ( int apiVersion, refimport_t *
 	REX(GetLighting);
 	REX(AddPolyToScene);
 	REX(AddLightToScene);
+	REX(AddLineLightToScene);
 	REX(RenderScene);
 	REX(GetLighting);
 
 	REX(SetColor);
+	REX(Set2DAnchor);
 	re.DrawStretchPic = RE_StretchPic;
 	re.DrawRotatePic = RE_RotatePic;
 	re.DrawRotatePic2 = RE_RotatePic2;

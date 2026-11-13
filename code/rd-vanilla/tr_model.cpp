@@ -378,6 +378,8 @@ void RE_RegisterMedia_LevelLoadBegin(const char *psMapName, ForceReload_e eForce
 {
 	gbAllowScreenDissolve = bAllowScreenDissolve;
 
+	R_ImagePrefetch_Begin( psMapName );	// (the images of the level are read ahead from here)
+
 	tr.numBSPModels = 0;
 
 	// for development purposes we may want to ditch certain media just before loading a map...
@@ -432,6 +434,7 @@ int RE_RegisterMedia_GetLevel(void)
 
 void RE_RegisterMedia_LevelLoadEnd(void)
 {
+	R_ImagePrefetch_End();
 	RE_RegisterModels_LevelLoadEnd(qfalse);
 	RE_RegisterImages_LevelLoadEnd();
 	ri.SND_RegisterAudio_LevelLoadEnd(qfalse);
@@ -986,7 +989,12 @@ void CM_SetupShaderProperties(void);
 void RE_BeginRegistration( glconfig_t *glconfigOut ) {
 	ri.Hunk_ClearToMark();
 
-	R_Init();
+	if ( !R_Init() )
+	{
+		// the renderer could not start (glConfig.vidWidth is 0): the engine loads another one
+		*glconfigOut = glConfig;
+		return;
+	}
 
 	*glconfigOut = glConfig;
 

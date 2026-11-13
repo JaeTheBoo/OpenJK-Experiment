@@ -29,7 +29,12 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "tr_common.h"
 #include "tr_public.h"
 #include "mdx_format.h"
+#ifdef RD_VULKAN
+#include "../rd-vulkan/qgl.h"	// the Vulkan renderer module: qgl* calls are answered by rd-vulkan/vk_gl.cpp
+#include "../rd-vulkan/vk_local.h"
+#else
 #include "qgl.h"
+#endif
 
 #define GL_INDEX_TYPE		GL_UNSIGNED_INT
 typedef unsigned int glIndex_t;
@@ -50,11 +55,25 @@ typedef struct dlight_s {
 	float	radius;
 
 	vec3_t	transformed;		// origin in local coordinate system
+
+	// a light along a line (RE_AddLineLightToScene): origin is its middle, half from there to an end, and radius the
+	// reach of the light from the nearest point of the line plus half's length (what the culling needs); a light at a
+	// point has half 0 and reach radius
+	vec3_t	half;
+	vec3_t	transformedHalf;	// half in local coordinate system
+	float	reach;
 } dlight_t;
+
+// how much further a light along a line (a saber, a bolt) reaches than the radius the game gives it for a light at its
+// middle, and how much brighter it is: the glow of the films (the shader dynamic lights only)
+#define DLIGHT_LINE_REACH		1.8f
+#define DLIGHT_LINE_BRIGHTNESS	1.25f
 
 
 // a trRefEntity_t has all the information passed in by
 // the client game, as well as some locally derived info
+#define MAX_ENTITY_LIGHTS	5	// the lamps of the level (LAMPS_AT_MAX) and the dynamic lights as one
+
 typedef struct {
 	refEntity_t	e;
 
@@ -67,6 +86,15 @@ typedef struct {
 	int			ambientLightInt;	// 32 bit rgba packed
 	vec3_t		directedLight;
 	int			dlightBits;
+	// the level's light alone, without the dynamic lights, for the characters' shadows (which the dynamic lights
+	// would turn towards themselves and darken): world space, towards it, and the share of it from that direction
+	vec3_t		shadowLightDir;
+	float		shadowStrength;
+	// lit by the level's lamps (r_lampLighting, tr_light.cpp) instead of directedLight from lightDir: each light's
+	// direction (the entity's axes) and colour, the lamps and then the dynamic lights as one
+	int			numLights;
+	vec3_t		lightDirs[MAX_ENTITY_LIGHTS];
+	vec3_t		lightColors[MAX_ENTITY_LIGHTS];
 } trRefEntity_t;
 
 
@@ -592,7 +620,7 @@ typedef struct srfDynamicMesh_s {
 } srfDynamicMesh_t;
 
 typedef struct drawSurf_s {
-	unsigned			sort;			// bit combination for fast compares
+	uint64_t			sort;			// bit combination for fast compares
 	surfaceType_t		*surface;		// any of surface*_t
 } drawSurf_t;
 
@@ -853,39 +881,29 @@ void		R_Modellist_f (void);
 #define	MAX_SKINS				512	//1024
 
 
-#define	MAX_DRAWSURFS			0x10000
+#define	MAX_DRAWSURFS			0x40000	// (was 0x10000; with up to 8191 entities, each with surfaces)
 #define	DRAWSURF_MASK			(MAX_DRAWSURFS-1)
 
 /*
 
-the drawsurf sort data is packed into a single 32 bit value so it can be
-compared quickly during the qsorting process
+the drawsurf sort data is packed into a 64 bit value so it can be compared quickly while sorting (a radix sort over
+the bytes that are used, QSORT_KEY_BYTES). The bits are allocated as follows (with the 13 bits of REFENTITYNUM_BITS):
 
-the bits are allocated as follows:
-
-22 - 31	: sorted shader index
-12 - 21	: entity index
-3 - 7	: fog index
-2		: used to be clipped flag
+33		: alpha fading models (drawn last)
+20 - 32	: sorted shader index
+7 - 19	: entity index
+2 - 6	: fog index
 0 - 1	: dlightmap index
-#define	QSORT_SHADERNUM_SHIFT	22
-#define	QSORT_ENTITYNUM_SHIFT	12
-#define	QSORT_FOGNUM_SHIFT		3
 
-	TTimo - 1.32
-31	:  used for alpha fading models (drawn last)
-18-30 : sorted shader index
-7-17  : entity index
-2-6   : fog index
-0-1   : dlightmap index
+It was 32 bits, with 11 bits of entity index, which a big fight could run out of (2047 entities).
 */
 
 #define	QSORT_FOGNUM_SHIFT		2
 #define	QSORT_REFENTITYNUM_SHIFT	7
 #define	QSORT_SHADERNUM_SHIFT	(QSORT_REFENTITYNUM_SHIFT+REFENTITYNUM_BITS)
-// Note: 32nd bit is reserved for RF_ALPHA_FADE voodoo magic
-// see R_AddEntitySurfaces tr.shiftedEntityNum
-#if (QSORT_SHADERNUM_SHIFT+SHADERNUM_BITS) > 31
+#define	QSORT_ALPHAFADE_SHIFT	(QSORT_SHADERNUM_SHIFT+SHADERNUM_BITS)	// RF_ALPHA_FADE, see R_AddEntitySurfaces
+#define	QSORT_KEY_BYTES			6
+#if QSORT_ALPHAFADE_SHIFT >= QSORT_KEY_BYTES * 8
 	#error "Need to update sorting, too many bits."
 #endif
 
@@ -919,6 +937,9 @@ typedef struct {
 	int			texEnv[2];
 	int			faceCulling;
 	uint32_t	glStateBits;
+	int			msaaSamples;			// samples per pixel of the frame buffer (0 or 1 when there is no multisampling)
+	qboolean	alphaToCoverage;		// alpha tested surfaces use alpha to coverage rather than the alpha test
+	qboolean	alphaToCoverageOn;		// GL_SAMPLE_ALPHA_TO_COVERAGE is currently enabled
 } glstate_t;
 
 
@@ -1017,7 +1038,7 @@ typedef struct {
 	trRefEntity_t			*currentEntity;
 	trRefEntity_t			worldEntity;		// point currentEntity at this when rendering world
 	int						currentEntityNum;
-	unsigned				shiftedEntityNum;	// currentEntityNum << QSORT_REFENTITYNUM_SHIFT (possible with high bit set for RF_ALPHA_FADE)
+	uint64_t				shiftedEntityNum;	// currentEntityNum << QSORT_REFENTITYNUM_SHIFT (with the QSORT_ALPHAFADE_SHIFT bit for RF_ALPHA_FADE)
 	model_t					*currentModel;
 
 	viewParms_t				viewParms;
@@ -1034,6 +1055,7 @@ typedef struct {
 
 	vec3_t					sunLight;			// from the sky shader for this level
 	vec3_t					sunDirection;
+	qboolean				levelHasSun;		// the sky shader of this level gave the sun (sunDirection is a default otherwise)
 	int						sunSurfaceLight;	// from the sky shader for this level
 	vec3_t					sunAmbient;			// from the sky shader	(only used for John's terrain system)
 
@@ -1093,6 +1115,7 @@ extern window_t		window;
 // cvars
 //
 extern cvar_t	*r_ignore;				// used for debugging anything
+extern cvar_t	*r_wideUI;				// keep 2D (menus/HUD) proportional on widescreen displays
 extern cvar_t	*r_verbose;				// used for verbose debug spew
 
 extern cvar_t	*r_znear;				// near Z clip plane
@@ -1138,6 +1161,7 @@ extern	cvar_t	*r_showcluster;
 
 extern cvar_t	*r_dlightStyle;
 extern cvar_t	*r_surfaceSprites;
+extern cvar_t	*r_surfaceSpriteRange;
 extern cvar_t	*r_surfaceWeather;
 
 extern cvar_t	*r_windSpeed;
@@ -1159,6 +1183,7 @@ extern cvar_t	*r_ignorehwgamma;		// overrides hardware gamma capabilities
 extern cvar_t	*r_allowExtensions;				// global enable/disable of OpenGL extensions
 extern cvar_t	*r_ext_compressed_textures;		// these control use of specific extensions
 extern cvar_t	*r_ext_compressed_lightmaps;	// turns on compression of lightmaps, off by default
+extern cvar_t	*r_smoothLightmaps;			// lightmaps made larger and smoother as the level loads
 extern cvar_t	*r_ext_preferred_tc_method;
 extern cvar_t	*r_ext_gamma_control;
 extern cvar_t	*r_ext_texenv_op;
@@ -1166,6 +1191,21 @@ extern cvar_t	*r_ext_multitexture;
 extern cvar_t	*r_ext_compiled_vertex_array;
 extern cvar_t	*r_ext_texture_env_add;
 extern cvar_t	*r_ext_texture_filter_anisotropic;
+extern cvar_t	*r_alphaToCoverage;
+extern cvar_t	*r_sampleShading;
+extern cvar_t	*r_glsl;
+extern cvar_t	*r_dlightGLSL;
+extern cvar_t	*r_postDebug;
+extern cvar_t	*r_ssao;
+extern cvar_t	*r_ssaoRadius;
+extern cvar_t	*r_ssaoStrength;
+extern cvar_t	*r_bloom;
+extern cvar_t	*r_bloomThreshold;
+extern cvar_t	*r_bloomIntensity;
+extern cvar_t	*r_sharpen;			// contrast adaptive sharpening of the 3D view, 0 (off) to 1
+extern cvar_t	*r_lightShafts;		// rays of sunlight over the 3D view, on levels with a sun: 0 (off), 1 (normal) to 2
+extern cvar_t	*r_eyeAdaptation;	// the 3D view brightens in dark places, dims in bright ones: 0 (off), 1 (normal) to 2
+extern cvar_t	*r_smaa;
 
 extern cvar_t	*r_DynamicGlow;
 extern cvar_t	*r_DynamicGlowPasses;
@@ -1185,6 +1225,9 @@ extern	cvar_t	*r_textureMode;
 extern	cvar_t	*r_offsetFactor;
 extern	cvar_t	*r_offsetUnits;
 
+float	R_Get2DVirtualWidth( void );	// width of the 2D virtual screen (height is always SCREEN_HEIGHT)
+float	R_Get2DBias( void );			// horizontal offset that centres the 640x480 area in the 2D virtual screen
+
 extern	cvar_t	*r_fullbright;					// avoid lightmap pass
 extern	cvar_t	*r_lightmap;					// render lightmaps only
 extern	cvar_t	*r_vertexLight;					// vertex lighting mode for better performance
@@ -1197,6 +1240,12 @@ extern	cvar_t	*r_shownormals;					// draws wireframe normals
 extern	cvar_t	*r_clear;						// force screen clear every frame
 
 extern	cvar_t	*r_shadows;						// controls shadows: 0 = none, 1 = blur, 2 = stencil, 3 = black planar projection
+extern	cvar_t	*r_shadowSoftness;				// stencil shadows: penumbra width, 0 = hard edges
+extern	cvar_t	*r_shadowSamples;				// stencil shadows: how many volumes make up a soft shadow
+extern	cvar_t	*r_shadowStrength;				// stencil shadows: scales how dark they are
+extern	cvar_t	*r_shadowTilt;					// stencil shadows: how much they lean away from the light
+extern	cvar_t	*r_shadowSelf;					// stencil shadows: 1 = characters are darkened by shadows too
+extern	cvar_t	*r_shadowMaps;					// 1 = cg_shadows 2 draws shadow maps too (as cg_shadows 4 does)
 extern	cvar_t	*r_flares;						// light flares
 
 extern	cvar_t	*r_intensity;
@@ -1245,7 +1294,7 @@ void R_AddLightningBoltSurfaces( trRefEntity_t *e );
 
 void R_AddPolygonSurfaces( void );
 
-void R_DecomposeSort( unsigned sort, int *entityNum, shader_t **shader,
+void R_DecomposeSort( uint64_t sort, int *entityNum, shader_t **shader,
 					 int *fogNum, int *dlightMap );
 
 void R_AddDrawSurf( const surfaceType_t *surface, const shader_t *shader, int fogIndex, int dlightMap );
@@ -1274,6 +1323,28 @@ void	GL_Bind( image_t *image );
 void	GL_SetDefaultState (void);
 void	GL_SelectTexture( int unit );
 void	GL_TextureMode( const char *string );
+
+// tr_glsl.cpp
+void	R_GLSL_Init( void );
+qboolean	R_GLSL_Available( void );
+int		R_GLSL_Generation( void );
+GLuint	R_GLSL_BuildProgram( const char *name, const char *vertexSource, const char *fragmentSource );
+void	R_GLSL_DeleteProgram( GLuint program );
+
+// tr_post.cpp
+void	R_Post_Init( void );
+void	RB_PostProcess( void );
+#include "renderer/tr_shadow_maps.h"	// (the shadow maps of the characters)
+qboolean	R_Post_GammaAvailable( void );
+void	RB_GammaPass( void );	// brightness and overbright for the whole picture (tr_post.h)
+// The soft particles (r_softParticles, vk_post.cpp; none in OpenGL yet): once the opaque surfaces of a view are drawn,
+// their depth is kept; then a stage of an effect drawn between RB_SoftParticles( units ) and RB_SoftParticles( 0 )
+// fades out within units in front of it (qfalse: it can't)
+void	RB_SoftParticlesBegin( void );
+qboolean	RB_SoftParticles( float units );
+
+// tr_backend.cpp
+void	SetViewportAndScissor( void );
 void	GL_CheckErrors( void );
 void	GL_State( uint32_t stateVector );
 void	GL_TexEnv( int env );
@@ -1343,7 +1414,7 @@ void		RE_RegisterImages_Info_f(void);
 
 model_t		*R_AllocModel( void );
 
-void    	R_Init( void );
+qboolean	R_Init( void );
 image_t		*R_FindImageFile( const char *name, qboolean mipmap, qboolean allowPicmip, qboolean allowTC, int glWrapClampMode );
 
 image_t		*R_CreateImage( const char *name, const byte *pic, int width, int height, GLenum format, qboolean mipmap, qboolean allowPicmip, qboolean allowTC, int wrapClampMode);
@@ -1434,6 +1505,7 @@ struct shaderCommands_s
 	int			fogNum;
 
 	int			dlightBits;	// or together of all vertexDlightBits
+	bool		effectPolys;	// polygons of effects are in it (RB_SurfacePolychain: soft particles)
 
 	int			numIndexes;
 	int			numVertexes;
@@ -1510,6 +1582,8 @@ SHADOWS
 
 void RB_ShadowTessEnd( void );
 void RB_ShadowFinish( void );
+qboolean RB_ShadowsDarken( void );		// (then the dynamic lights' passes wait for it:)
+void RB_DrawDeferredDlights( void );	// after RB_ShadowFinish, tr_dlight_glsl.h
 void RB_ProjectionShadowDeform( void );
 
 /*
@@ -1570,6 +1644,7 @@ void RE_ClearScene( void );
 void RE_AddRefEntityToScene( const refEntity_t *ent );
 void RE_AddPolyToScene( qhandle_t hShader , int numVerts, const polyVert_t *verts );
 void RE_AddLightToScene( const vec3_t org, float intensity, float r, float g, float b );
+void RE_AddLineLightToScene( const vec3_t start, const vec3_t end, float intensity, float r, float g, float b );
 void RE_RenderScene( const refdef_t *fd );
 
 qboolean RE_GetLighting( const vec3_t origin, vec3_t ambientLight, vec3_t directedLight, vec3_t lightDir );
@@ -1748,6 +1823,7 @@ typedef struct {
 	float	w, h;
 	float	s1, t1;
 	float	s2, t2;
+	qboolean	keepShape;		// spanning the 640 wide area, but centred on a wide screen instead of stretched (RE_Set2DAnchor)
 } stretchPicCommand_t;
 
 typedef struct {
@@ -1820,6 +1896,7 @@ void R_IssuePendingRenderCommands( void );
 void R_AddDrawSurfCmd( drawSurf_t *drawSurfs, int numDrawSurfs );
 
 void RE_SetColor( const float *rgba );
+void RE_Set2DAnchor( int anchor );
 void RE_StretchPic ( float x, float y, float w, float h,
 					  float s1, float t1, float s2, float t2, qhandle_t hShader );
 void RE_RotatePic ( float x, float y, float w, float h,

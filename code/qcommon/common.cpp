@@ -1074,6 +1074,38 @@ static void Com_CatchError ( int code )
 
 /*
 =================
+Com_MigrateConfig
+
+Brings a config saved by an older build up to date, once (com_configVersion counts the steps done).
+
+Version 1 made the Vulkan renderer the default. A saved choice of the OpenGL renderer is the old default and
+cannot be told apart from a deliberate one, so it is changed to Vulkan once; cl_renderer rdsp-vanilla
+(rdjosp-vanilla) goes back to OpenGL, and the game falls back to it by itself when Vulkan cannot be used.
+=================
+*/
+#define COM_CONFIG_VERSION	1
+#ifdef JK2_MODE
+#define COM_OPENGL_RENDERER	"rdjosp-vanilla"
+#define COM_VULKAN_RENDERER	"rdjosp-vulkan"
+#else
+#define COM_OPENGL_RENDERER	"rdsp-vanilla"
+#define COM_VULKAN_RENDERER	"rdsp-vulkan"
+#endif
+
+static void Com_MigrateConfig( void ) {
+	cvar_t *version = Cvar_Get( "com_configVersion", "0", CVAR_ARCHIVE_ND );
+
+	if ( version->integer >= COM_CONFIG_VERSION ) {
+		return;
+	}
+	if ( !Q_stricmp( Cvar_VariableString( "cl_renderer" ), COM_OPENGL_RENDERER ) ) {
+		Cvar_Set( "cl_renderer", COM_VULKAN_RENDERER );
+	}
+	Cvar_Set( "com_configVersion", va( "%d", COM_CONFIG_VERSION ) );
+}
+
+/*
+=================
 Com_Init
 =================
 */
@@ -1176,6 +1208,8 @@ void Com_Init( char *commandLine ) {
 #endif
 
 		Sys_Init();	// this also detects CPU type, so I can now do this CPU check below...
+
+		Com_MigrateConfig();
 
 		Sys_SetProcessorAffinity();
 

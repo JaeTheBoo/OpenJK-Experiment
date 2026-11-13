@@ -431,6 +431,7 @@ void RB_BeginSurface( shader_t *shader, int fogNum ) {
 	tess.shader = state;//shader;
 	tess.fogNum = fogNum;
 	tess.dlightBits = 0;		// will be OR'd in by surface functions
+	tess.effectPolys = false;
 
 	tess.SSInitializedWind = qfalse;	//is this right?
 
@@ -494,6 +495,8 @@ static void DrawMultitextured( shaderCommands_t *input, int stage ) {
 
 	GL_SelectTexture( 0 );
 }
+
+#include "renderer/tr_dlight_glsl.h"
 
 //--EF_old dlight code...reverting back to Quake III dlight to see if people like that better
 // Lifted the whole function because someone hacked the heck out of this and it doesn't seem to
@@ -894,23 +897,7 @@ static void ProjectDlightTexture2( void ) {
 		}
 		qglVertexPointer (3, GL_FLOAT, 16, vertCoordsArray);	// padded for SIMD
 
-		dStage = NULL;
-		if (tess.shader && qglActiveTextureARB)
-		{
-			int i = 0;
-			while (i < tess.shader->numUnfoggedPasses)
-			{
-				const int blendBits = (GLS_SRCBLEND_BITS+GLS_DSTBLEND_BITS);
-				if (((tess.shader->stages[i].bundle[0].image && !tess.shader->stages[i].bundle[0].isLightmap && !tess.shader->stages[i].bundle[0].numTexMods && tess.shader->stages[i].bundle[0].tcGen != TCGEN_ENVIRONMENT_MAPPED && tess.shader->stages[i].bundle[0].tcGen != TCGEN_FOG) ||
-					 (tess.shader->stages[i].bundle[1].image && !tess.shader->stages[i].bundle[1].isLightmap && !tess.shader->stages[i].bundle[1].numTexMods && tess.shader->stages[i].bundle[1].tcGen != TCGEN_ENVIRONMENT_MAPPED && tess.shader->stages[i].bundle[1].tcGen != TCGEN_FOG)) &&
-					(tess.shader->stages[i].stateBits & blendBits) == 0 )
-				{ //only use non-lightmap opaque stages
-                    dStage = &tess.shader->stages[i];
-					break;
-				}
-				i++;
-			}
-		}
+		dStage = RB_DlightDiffuseStage();
 
 		if (dStage)
 		{
@@ -1241,23 +1228,7 @@ static void ProjectDlightTexture( void ) {
 #endif
 
 
-		dStage = NULL;
-		if (tess.shader && qglActiveTextureARB)
-		{
-			int i = 0;
-			while (i < tess.shader->numUnfoggedPasses)
-			{
-				const int blendBits = (GLS_SRCBLEND_BITS+GLS_DSTBLEND_BITS);
-				if (((tess.shader->stages[i].bundle[0].image && !tess.shader->stages[i].bundle[0].isLightmap && !tess.shader->stages[i].bundle[0].numTexMods && tess.shader->stages[i].bundle[0].tcGen != TCGEN_ENVIRONMENT_MAPPED && tess.shader->stages[i].bundle[0].tcGen != TCGEN_FOG) ||
-					 (tess.shader->stages[i].bundle[1].image && !tess.shader->stages[i].bundle[1].isLightmap && !tess.shader->stages[i].bundle[1].numTexMods && tess.shader->stages[i].bundle[1].tcGen != TCGEN_ENVIRONMENT_MAPPED && tess.shader->stages[i].bundle[1].tcGen != TCGEN_FOG)) &&
-					(tess.shader->stages[i].stateBits & blendBits) == 0 )
-				{ //only use non-lightmap opaque stages
-                    dStage = &tess.shader->stages[i];
-					break;
-				}
-				i++;
-			}
-		}
+		dStage = RB_DlightDiffuseStage();
 
 		if (dStage)
 		{
@@ -1798,6 +1769,28 @@ static vec4_t	GLFogOverrideColors[GLFOGOVERRIDE_MAX] =
 static const float logtestExp2 = (sqrt( -log( 1.0 / 255.0 ) ));
 #endif
 extern bool tr_stencilled; //tr_backend.cpp
+// The soft particles (r_softParticles): a stage of an effect (the polygons and sprites, lines, beams and glows the
+// effects and the game add, not a model or the level) that is blended without writing depth fades out within this
+// many units in front of what is behind it. Not the marks laid on surfaces (scorches, blood: decals, drawn with a
+// polygon offset), which are on what is behind them and would fade away whole.
+#define SOFT_PARTICLE_UNITS	6.0f
+
+static bool RB_StageIsSoft( uint32_t stateBits )
+{
+	static cvar_t *soft = NULL;
+	if ( !soft ) {
+		soft = ri.Cvar_Get( "r_softParticles", "1", CVAR_ARCHIVE_ND );	// (made by RB_SoftParticlesBegin too)
+	}
+	const trRefEntity_t *ent = backEnd.currentEntity;
+	if ( !soft->integer || backEnd.projection2D || !ent || tess.shader->polygonOffset || tess.shader->sort <= SS_DECAL ) {
+		return false;
+	}
+	if ( ent == &tr.worldEntity ? !tess.effectPolys : ( ent->e.reType == RT_MODEL || ( ent->e.renderfx & ( RF_DEPTHHACK | RF_NODEPTH ) ) ) ) {
+		return false;
+	}
+	return ( stateBits & ( GLS_SRCBLEND_BITS | GLS_DSTBLEND_BITS ) ) && !( stateBits & ( GLS_DEPTHMASK_TRUE | GLS_ATEST_BITS ) );
+}
+
 static void RB_IterateStagesGeneric( shaderCommands_t *input )
 {
 	int stage;
@@ -2026,7 +2019,11 @@ static void RB_IterateStagesGeneric( shaderCommands_t *input )
 			//
 			// draw
 			//
+			const bool soft = !lStencilled && RB_StageIsSoft( glState.glStateBits ) && RB_SoftParticles( SOFT_PARTICLE_UNITS );
 			R_DrawElements( input->numIndexes, input->indexes );
+			if ( soft ) {
+				RB_SoftParticles( 0.0f );
+			}
 
 			if (lStencilled)
 			{ //re-enable the color buffer, disable stencil test
@@ -2131,7 +2128,11 @@ void RB_StageIteratorGeneric( void )
 	//
 	if ( tess.dlightBits && tess.shader->sort <= SS_OPAQUE
 		&& !(tess.shader->surfaceFlags & (SURF_NODLIGHT | SURF_SKY) ) ) {
-		if (r_dlightStyle->integer>0)
+		if ((r_dlightGLSL->integer || R_DlightShadows()) && R_GLSL_Available() && RB_DlightPassGLSL())
+		{
+			// done
+		}
+		else if (r_dlightStyle->integer>0)
 		{
 			ProjectDlightTexture2();
 		}

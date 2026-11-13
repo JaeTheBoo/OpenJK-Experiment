@@ -21,7 +21,7 @@ if(NOT InOpenJK)
 	message(FATAL_ERROR "Use the top-level cmake script!")
 endif(NOT InOpenJK)
 
-if(BuildSPRdVanilla OR BuildJK2SPRdVanilla)
+if(BuildSPRdVanilla OR BuildJK2SPRdVanilla OR BuildSPRdVulkan OR BuildJK2SPRdVulkan)
 
 	set(SPRDVanillaRendererIncludeDirectories ${SPDir})
 	set(SPRDVanillaRendererIncludeDirectories
@@ -34,7 +34,8 @@ if(BuildSPRdVanilla OR BuildJK2SPRdVanilla)
 	# Modular Renderer crap (let's hope this works..)
 
 	# Defines
-	set(SPRDVanillaDefines ${SharedDefines} "RENDERER" "_JK2EXE")
+	set(SPRDBaseDefines ${SharedDefines} "RENDERER" "_JK2EXE")
+	set(SPRDVanillaDefines ${SPRDBaseDefines})
 
 	# Files
 
@@ -50,6 +51,8 @@ if(BuildSPRdVanilla OR BuildJK2SPRdVanilla)
 		)
 	source_group("ghoul2" FILES ${SPRDVanillaG2Files})
 	set(SPRDVanillaFiles ${SPRDVanillaFiles} ${SPRDVanillaG2Files})
+
+    list(APPEND SPRDVanillaRendererLibraries Threads::Threads)
 
     # Transparently use either bundled or system jpeg.
     list(APPEND SPRDVanillaRendererIncludeDirectories ${JPEG_INCLUDE_DIR})
@@ -105,6 +108,7 @@ if(BuildSPRdVanilla OR BuildJK2SPRdVanilla)
 		"${SPDir}/rd-vanilla/tr_curve.cpp"
 		"${SPDir}/rd-vanilla/tr_draw.cpp"
 		"${SPDir}/rd-vanilla/tr_ghoul2.cpp"
+		"${SPDir}/rd-vanilla/tr_glsl.cpp"
 		"${SPDir}/rd-vanilla/tr_image.cpp"
 		"${SPDir}/rd-vanilla/tr_init.cpp"
 		"${SPDir}/rd-vanilla/tr_light.cpp"
@@ -114,6 +118,7 @@ if(BuildSPRdVanilla OR BuildJK2SPRdVanilla)
 		"${SPDir}/rd-vanilla/tr_mesh.cpp"
 		"${SPDir}/rd-vanilla/tr_model.cpp"
 		"${SPDir}/rd-vanilla/tr_outcast_skeleton.cpp"
+		"${SPDir}/rd-vanilla/tr_post.cpp"
 		"${SPDir}/rd-vanilla/tr_quicksprite.cpp"
 		"${SPDir}/rd-vanilla/tr_quicksprite.h"
 		"${SPDir}/rd-vanilla/tr_scene.cpp"
@@ -141,6 +146,7 @@ if(BuildSPRdVanilla OR BuildJK2SPRdVanilla)
 		"${SPDir}/rd-common/tr_font.cpp"
 		"${SPDir}/rd-common/tr_font.h"
 		"${SPDir}/rd-common/tr_image_load.cpp"
+		"${SPDir}/rd-common/tr_image_prefetch.cpp"
 		"${SPDir}/rd-common/tr_image_jpg.cpp"
 		"${SPDir}/rd-common/tr_image_tga.cpp"
 		"${SPDir}/rd-common/tr_image_png.cpp"
@@ -149,6 +155,9 @@ if(BuildSPRdVanilla OR BuildJK2SPRdVanilla)
 		"${SPDir}/rd-common/tr_types.h")
 	source_group("rd-common" FILES ${SPRDVanillaRdCommonFiles})
 	set(SPRDVanillaFiles ${SPRDVanillaFiles} ${SPRDVanillaRdCommonFiles})
+
+	# (the Vulkan renderer module only needs the OpenGL headers, not the library)
+	set(SPRDVulkanLibrariesBase ${SPRDVanillaRendererLibraries})
 
 	find_package(OpenGL REQUIRED)
 	set(SPRDVanillaRendererIncludeDirectories ${SPRDVanillaRendererIncludeDirectories} ${OPENGL_INCLUDE_DIR})
@@ -169,17 +178,10 @@ if(BuildSPRdVanilla OR BuildJK2SPRdVanilla)
 				DESTINATION ${InstallDir}
 				COMPONENT ${Component})
 		else(WIN32)
-			if(MakeApplicationBundles AND (BuildSPEngine OR BuildJK2SPEngine))
-				install(TARGETS ${ProjectName}
-					LIBRARY
-					DESTINATION "${InstallDir}/${EngineName}.app/Contents/MacOS/"
-					COMPONENT ${Component})
-			else()
-				install(TARGETS ${ProjectName}
-					LIBRARY
-					DESTINATION ${InstallDir}
-					COMPONENT ${Component})
-			endif()
+			install(TARGETS ${ProjectName}
+				LIBRARY
+				DESTINATION ${InstallDir}
+				COMPONENT ${Component})
 		endif()
 
 		set_target_properties(${ProjectName} PROPERTIES COMPILE_DEFINITIONS "${SPRDVanillaDefines}")
@@ -201,4 +203,88 @@ if(BuildSPRdVanilla OR BuildJK2SPRdVanilla)
 		add_sp_renderer_project(${JK2SPVanillaRenderer} "JK2 SP Vanilla Renderer" ${JK2SPEngine} ${JK2InstallDir} ${JK2SPClientComponent})
 	endif(BuildJK2SPRdVanilla)
 
-endif(BuildSPRdVanilla OR BuildJK2SPRdVanilla)
+endif(BuildSPRdVanilla OR BuildJK2SPRdVanilla OR BuildSPRdVulkan OR BuildJK2SPRdVulkan)
+
+# The Vulkan renderer module is these same sources compiled with RD_VULKAN, plus the Vulkan layer in rd-vulkan
+# (see docs/vulkan-renderer.md).
+if(BuildSPRdVulkan OR BuildJK2SPRdVulkan)
+	find_package(Vulkan)
+	set(SPRDVulkanIncludeDir ${Vulkan_INCLUDE_DIRS})
+	set(SPRDVulkanLibrary Vulkan::Vulkan)
+	# MinGW (the Windows version built on Linux): the headers are enough. The Vulkan loader of Windows, vulkan-1.dll,
+	# comes with the graphics driver, and its import library is made from the list of what the renderer calls; the
+	# headers are copied apart, as the folder they were found in holds the headers of the system building it too.
+	if(NOT Vulkan_FOUND AND MINGW AND CMAKE_DLLTOOL AND Vulkan_INCLUDE_DIR AND EXISTS "${Vulkan_INCLUDE_DIR}/vulkan/vulkan.h")
+		set(VulkanImportLibrary "${CMAKE_CURRENT_BINARY_DIR}/libvulkan-1.dll.a")
+		execute_process(COMMAND ${CMAKE_DLLTOOL} -m i386:x86-64 -t vkimp -d "${SPDir}/rd-vulkan/vulkan-1.def" -l "${VulkanImportLibrary}"
+			WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"	# (short names for its temporary files: long build paths make it fail)
+			RESULT_VARIABLE VulkanImportResult)
+		if(VulkanImportResult EQUAL 0)
+			file(REMOVE_RECURSE "${CMAKE_CURRENT_BINARY_DIR}/vulkan-include")
+			file(COPY "${Vulkan_INCLUDE_DIR}/vulkan" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/vulkan-include")
+			if(EXISTS "${Vulkan_INCLUDE_DIR}/vk_video")
+				file(COPY "${Vulkan_INCLUDE_DIR}/vk_video" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/vulkan-include")
+			endif()
+			set(SPRDVulkanIncludeDir "${CMAKE_CURRENT_BINARY_DIR}/vulkan-include")
+			set(SPRDVulkanLibrary "${VulkanImportLibrary}")
+			set(Vulkan_FOUND TRUE)
+			message(STATUS "Vulkan: import library for vulkan-1.dll made from rd-vulkan/vulkan-1.def")
+		endif()
+	endif()
+	if(NOT Vulkan_FOUND)
+		message(STATUS "Vulkan headers/loader not found, not building the Vulkan renderer module")
+	else()
+		# (tr_glsl.cpp and tr_post.cpp are the OpenGL versions of what vk_post.cpp does)
+		set(SPRDVulkanMainFiles ${SPRDVanillaMainFiles})
+		list(REMOVE_ITEM SPRDVulkanMainFiles "${SPDir}/rd-vanilla/tr_glsl.cpp" "${SPDir}/rd-vanilla/tr_post.cpp")
+		set(SPRDVulkanFiles
+			${SPRDVanillaG2Files}
+			${SPRDVanillaCommonFiles}
+			${SPRDVanillaCommonSafeFiles}
+			${SPRDVulkanMainFiles}
+			${SPRDVanillaRdCommonFiles}
+			"${SPDir}/rd-vulkan/qgl.h"
+			"${SPDir}/rd-vulkan/vk_local.h"
+			"${SPDir}/rd-vulkan/vk_priv.h"
+			"${SPDir}/rd-vulkan/vk_spirv.h"
+			"${SPDir}/rd-vulkan/vk_draw.cpp"
+			"${SPDir}/rd-vulkan/vk_frame.cpp"
+			"${SPDir}/rd-vulkan/vk_gl.cpp"
+			"${SPDir}/rd-vulkan/vk_image.cpp"
+			"${SPDir}/rd-vulkan/vk_init.cpp"
+			"${SPDir}/rd-vulkan/vk_mem.cpp"
+			"${SPDir}/rd-vulkan/vk_post.cpp"
+			"${SPDir}/rd-vulkan/vk_rt.cpp"
+			)
+		source_group("vulkan" FILES ${SPRDVulkanFiles})
+
+		set(SPRDVulkanIncludeDirectories "${SPDir}/rd-vulkan" ${SPRDVanillaRendererIncludeDirectories} ${SPRDVulkanIncludeDir})
+		set(SPRDVulkanLibraries ${SPRDVulkanLibrariesBase} ${SPRDVulkanLibrary})
+
+		function(add_sp_vulkan_renderer_project ProjectName Label InstallDir Component Defines)
+			add_library(${ProjectName} SHARED ${SPRDVulkanFiles})
+			if(NOT MSVC)
+				set_target_properties(${ProjectName} PROPERTIES PREFIX "")
+			endif()
+
+			if(WIN32)
+				install(TARGETS ${ProjectName} RUNTIME DESTINATION ${InstallDir} COMPONENT ${Component})
+			else(WIN32)
+				install(TARGETS ${ProjectName} LIBRARY DESTINATION ${InstallDir} COMPONENT ${Component})
+			endif()
+
+			set_target_properties(${ProjectName} PROPERTIES COMPILE_DEFINITIONS "${Defines}")
+			set_property(TARGET ${ProjectName} APPEND PROPERTY COMPILE_OPTIONS ${OPENJK_VISIBILITY_FLAGS})
+			set_target_properties(${ProjectName} PROPERTIES INCLUDE_DIRECTORIES "${SPRDVulkanIncludeDirectories}")
+			set_target_properties(${ProjectName} PROPERTIES PROJECT_LABEL ${Label})
+			target_link_libraries(${ProjectName} ${SPRDVulkanLibraries})
+		endfunction(add_sp_vulkan_renderer_project)
+
+		if(BuildSPRdVulkan)
+			add_sp_vulkan_renderer_project(${SPRDVulkanRenderer} "SP Vulkan Renderer" ${JKAInstallDir} ${JKASPClientComponent} "${SPRDBaseDefines};RD_VULKAN")
+		endif(BuildSPRdVulkan)
+		if(BuildJK2SPRdVulkan)
+			add_sp_vulkan_renderer_project(${JK2SPVulkanRenderer} "JK2 SP Vulkan Renderer" ${JK2InstallDir} ${JK2SPClientComponent} "${SPRDBaseDefines};JK2_MODE;RD_VULKAN")
+		endif(BuildJK2SPRdVulkan)
+	endif()
+endif(BuildSPRdVulkan OR BuildJK2SPRdVulkan)

@@ -873,7 +873,7 @@ static int G2_ComputeLOD( trRefEntity_t *ent, const model_t *currentModel, int l
 	if ( ( projectedRadius = ProjectRadius( 0.75*largestScale*ent->e.radius, ent->e.origin ) ) != 0 )	//we reduce the radius to make the LOD match other model types which use the actual bound box size
  	{
  		lodscale = r_lodscale->value;
- 		if (lodscale > 20) lodscale = 20;
+ 		if (lodscale > 50) lodscale = 50;
  		flod = 1.0f - projectedRadius * lodscale;
  	}
  	else
@@ -2297,7 +2297,7 @@ void RenderSurfaces(CRenderSurface &RS)
 		// stencil shadows can't do personal models unless I polyhedron clip
 		//using z-fail now so can do personal models -rww
 		if ( /*!RS.personalModel
-			&& */r_shadows->integer == 2
+			&& */R_MODEL_SHADOWS( r_shadows->integer )
 //			&& RS.fogNum == 0
 			&& (RS.renderfx & RF_SHADOW_PLANE )
 			&& !(RS.renderfx & ( RF_NOSHADOW | RF_DEPTHHACK ) )
