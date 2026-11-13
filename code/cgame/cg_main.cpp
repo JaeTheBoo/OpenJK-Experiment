@@ -28,6 +28,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "g_local.h"
 
 #include "../qcommon/sstring.h"
+#include "../game/g_outcast.h"
 #include "qcommon/ojk_saved_game_helper.h"
 
 //NOTENOTE: Be sure to change the mirrored code in g_shared.h
@@ -2152,7 +2153,10 @@ void CG_Init( int serverCommandSequence ) {
 
 	CG_LoadHudMenu();      // load new hud stuff
 
-	cgi_UI_Menu_OpenByName("loadscreen");
+	if ( !G_OutcastInterface() )	// (Jedi Outcast's menus have none: CG_DrawInformation draws its load screen)
+	{
+		cgi_UI_Menu_OpenByName("loadscreen");
+	}
 
 	//rww - Moved from CG_GameStateReceived (we don't want to clear perm ents)
 	memset( cg_entities, 0, sizeof(cg_entities) );
@@ -3527,13 +3531,15 @@ void CG_DrawDataPadInventorySelect( void )
 	}
 
 
+	// (Jedi Outcast's menus: a closer row, higher up)
+	const qboolean outcastLayout = G_OutcastInterface();
 	const int smallIconSize = 40;
 	const int bigIconSize = 80;
-	const int bigPad = 64;
-	const int pad = 32;
+	const int bigPad = outcastLayout ? 8 : 64;
+	const int pad = outcastLayout ? 8 : 32;
 
 	const int centerXPos = 320;
-	const int graphicYPos = 340;
+	const int graphicYPos = outcastLayout ? 300 : 340;
 
 
 	// Left side ICONS
@@ -4217,13 +4223,15 @@ void CG_DrawDataPadForceSelect( void )
 	}
 
 
-	const int smallIconSize = 40;
-	const int bigIconSize = 70;
-	const int bigPad = 64;
-	const int pad = 32;
+	// (Jedi Outcast's menus: smaller icons in a closer row, higher up)
+	const qboolean outcastLayout = G_OutcastInterface();
+	const int smallIconSize = outcastLayout ? 30 : 40;
+	const int bigIconSize = outcastLayout ? 60 : 70;
+	const int bigPad = outcastLayout ? 8 : 64;
+	const int pad = outcastLayout ? 8 : 32;
 
 	const int centerXPos = 320;
-	const int graphicYPos = 340;
+	const int graphicYPos = outcastLayout ? 310 : 340;
 
 	i = cg.DataPadforcepowerSelect - 1;
 	if (i < 0)
@@ -4344,7 +4352,11 @@ void CG_DrawDataPadForceSelect( void )
 		cgi_SP_GetStringTextString( va("SP_INGAME_%s",forcepowerLvl3Desc[cg.DataPadforcepowerSelect]), text2, sizeof(text2) );
 	}
 
-	if (text[0])
+	if (text[0] && outcastLayout)
+	{
+		CG_DisplayBoxedText( 70, 50, 500, 300, va("%s%s",text,text2), cgs.media.qhFontSmall, 0.7f, colorTable[CT_ICON_BLUE] );
+	}
+	else if (text[0])
 	{
 		const short textboxXPos = 40;
 		const short textboxYPos = 60;

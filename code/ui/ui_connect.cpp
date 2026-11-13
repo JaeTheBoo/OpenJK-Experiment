@@ -78,7 +78,17 @@ void UI_DrawConnect( const char *servername, const char *updateInfoString ) {
 		UI_DrawThumbNail(0,0, SCREEN_WIDTH, SCREEN_HEIGHT, levelPic );
 	}
 #else
-	UI_DrawHandlePic( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, uis.menuBackShader );
+	if ( UI_OutcastStyle() )
+	{//Jedi Outcast's menus: black until the level's picture shows (the background is Jedi Academy's title art)
+		static const vec4_t black = { 0.0f, 0.0f, 0.0f, 1.0f };
+		ui.R_SetColor( black );
+		UI_DrawHandlePic( -SCREEN_WIDTH, 0, 3*SCREEN_WIDTH, SCREEN_HEIGHT, uis.whiteShader );
+		ui.R_SetColor( NULL );
+	}
+	else
+	{
+		UI_DrawHandlePic( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, uis.menuBackShader );
+	}
 #endif
 }
 

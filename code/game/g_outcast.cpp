@@ -49,6 +49,17 @@ qboolean G_IsOutcastCampaign( void )
 	return ( G_OutcastDataAvailable() && !Q_stricmp( campaign->string, "outcast" ) ) ? qtrue : qfalse;
 }
 
+qboolean G_OutcastInterface( void )
+{
+	// Set by the menus when they are loaded (_UI_Init, from ui_style)
+	static cvar_t *outcastInterface = NULL;
+	if ( !outcastInterface )
+	{
+		outcastInterface = gi.cvar( "ui_outcastInterface", "0", CVAR_ROM );
+	}
+	return outcastInterface->integer ? qtrue : qfalse;
+}
+
 const char *G_PlayerScriptName( void )
 {
 	return G_IsOutcastCampaign() ? "kyle" : "player";

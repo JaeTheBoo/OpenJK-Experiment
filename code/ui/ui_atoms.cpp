@@ -104,7 +104,7 @@ void UI_SetActiveMenu( const char* menuname,const char *menuID )
 		return;
 	}
 #ifndef JK2_MODE
-	if ( Q_stricmp (menuname, "missionfailed_menu") == 0 )
+	if ( Q_stricmp (menuname, "missionfailed_menu") == 0 && !UI_OutcastStyle() )	// (Jedi Outcast's menus have none: the game writes it on the screen)
 	{
 		Menus_CloseAll();
 		Menus_ActivateByName("missionfailed_menu");

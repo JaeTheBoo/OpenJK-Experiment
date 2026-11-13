@@ -37,6 +37,11 @@ qboolean G_OutcastDataAvailable( void );
 // it from the player's choice of story (ui_main.cpp), and saved games keep it.
 qboolean G_IsOutcastCampaign( void );
 
+// True while Jedi Outcast's menus are loaded (ui_style "outcast", whichever story is played): what the
+// game draws within or beside them (the datapad pages, the loading and death screens) is then laid out
+// as Jedi Outcast laid it out.
+qboolean G_OutcastInterface( void );
+
 // The player's name in scripts and level targets: Jedi Outcast's scripts call him "kyle".
 const char *G_PlayerScriptName( void );
 

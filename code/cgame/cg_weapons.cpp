@@ -29,6 +29,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "../game/g_vehicles.h"
 
 #include "../game/anims.h"
+#include "../game/g_outcast.h"
 
 extern void CG_LightningBolt( centity_t *cent, vec3_t origin );
 
@@ -1513,20 +1514,26 @@ void CG_DrawDataPadWeaponSelect( void )
 		weaponSelectI = 13;
 	}
 
+	// (Jedi Outcast's menus: a closer row, higher up, the icons beside the chosen one faded)
+	const qboolean outcastLayout = G_OutcastInterface();
 	const int smallIconSize = 40;
 	const int bigIconSize = 80;
-	const int bigPad = 64;
-	const int pad = 32;
+	const int bigPad = outcastLayout ? 8 : 64;
+	const int pad = outcastLayout ? 8 : 32;
 
 	const int centerXPos = 320;
-	const int graphicYPos = 340;
+	const int graphicYPos = outcastLayout ? 310 : 340;
+	const int bigIconYPos = (graphicYPos-((bigIconSize-smallIconSize)/2)) + (outcastLayout ? 0 : 10);
+	vec4_t sideIconColor;
+	memcpy( sideIconColor, colorTable[CT_WHITE], sizeof(vec4_t) );
+	sideIconColor[3] = outcastLayout ? 0.6f : 1.0f;
 
 
 	// Left side ICONS
 	// Work backwards from current icon
 	holdX = centerXPos - ((bigIconSize/2) + bigPad + smallIconSize);
 
-	cgi_R_SetColor( colorTable[CT_WHITE] );
+	cgi_R_SetColor( sideIconColor );
 	for (iconCnt=1;iconCnt<(sideLeftIconCnt+1);weaponSelectI--)
 	{
 		if ( weaponSelectI == WP_CONCUSSION )
@@ -1592,11 +1599,11 @@ void CG_DrawDataPadWeaponSelect( void )
 			// Draw graphic to show weapon has ammo or no ammo
 		if (!CG_WeaponCheck(cg.DataPadWeaponSelect))
 		{
-			CG_DrawPic( centerXPos-(bigIconSize/2), (graphicYPos-((bigIconSize-smallIconSize)/2))+10, bigIconSize, bigIconSize, weaponInfo->weaponIconNoAmmo );
+			CG_DrawPic( centerXPos-(bigIconSize/2), bigIconYPos, bigIconSize, bigIconSize, weaponInfo->weaponIconNoAmmo );
 		}
 		else
 		{
-			CG_DrawPic( centerXPos-(bigIconSize/2), (graphicYPos-((bigIconSize-smallIconSize)/2))+10, bigIconSize, bigIconSize, weaponInfo->weaponIcon );
+			CG_DrawPic( centerXPos-(bigIconSize/2), bigIconYPos, bigIconSize, bigIconSize, weaponInfo->weaponIcon );
 		}
 	}
 
@@ -1616,7 +1623,7 @@ void CG_DrawDataPadWeaponSelect( void )
 
 	// Right side ICONS
 	// Work forwards from current icon
-	cgi_R_SetColor(colorTable[CT_WHITE]);
+	cgi_R_SetColor( sideIconColor );
 	holdX = centerXPos + (bigIconSize/2) + bigPad;
 	for (iconCnt=1;iconCnt<(sideRightIconCnt+1);weaponSelectI++)
 	{
@@ -1674,7 +1681,12 @@ void CG_DrawDataPadWeaponSelect( void )
 	// Print the weapon description
 	cgi_SP_GetStringTextString( va("SP_INGAME_%s",weaponDesc[cg.DataPadWeaponSelect-1]), text, sizeof(text) );
 
-	if (text[0])
+	if (text[0] && outcastLayout)
+	{
+		static const vec4_t outcastTextColor = { .875f, .718f, .121f, 1.0f };
+		CG_DisplayBoxedText( 70, 50, 500, 300, text, cgs.media.qhFontSmall, 0.7f, outcastTextColor );
+	}
+	else if (text[0])
 	{
 		const short textboxXPos = 40;
 		const short textboxYPos = 60;

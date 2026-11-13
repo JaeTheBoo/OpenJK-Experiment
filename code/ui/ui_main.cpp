@@ -2797,6 +2797,9 @@ void _UI_Init( qboolean inGameLoad )
 	// whose menus: Jedi Outcast's need its game data, and its copies of the files both games have
 	// (the menu sets and art of both have the same names) are read instead of Jedi Academy's
 	ui_outcastStyle = FS_SetOutcastInterface( !Q_stricmp( ui_style.string, "outcast" ) ? qtrue : qfalse );
+	// the game's drawing (datapad pages, loading screen, death screen) follows the menus that are loaded
+	Cvar_Get( "ui_outcastInterface", "0", CVAR_ROM );
+	Cvar_Set( "ui_outcastInterface", ui_outcastStyle ? "1" : "0" );
 #endif
 
 	// The fonts the menus number are the ones they register, in their order: start that list again (after

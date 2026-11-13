@@ -26,6 +26,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "cg_media.h"
 #include "../game/objectives.h"
 #include "../game/b_local.h"
+#include "../game/g_outcast.h"
 
 #define	SCOREBOARD_WIDTH	(26*BIGCHAR_WIDTH)
 
@@ -90,13 +91,41 @@ CG_MissionFailed
 =================
 */
 int statusTextIndex = -1;
+
+// Jedi Outcast's menus have no mission failed menu: as there, the reason is written on the screen and
+// the fire button restarts (ESCAPE opens the menus).
+static void CG_DrawOutcastMissionFailed(void)
+{
+	char text[1024]={0};
+	char reason[MAX_STRING_CHARS];
+	int w;
+	const int y = 230;
+
+	cgi_SP_GetStringTextString( "SP_INGAME_MISSIONFAILED", text, sizeof(text) );
+	w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontMedium, 1.2f);
+	cgi_R_Font_DrawString(320 - w/2, y, text, colorTable[CT_HUD_RED], cgs.media.qhFontMedium, -1, 1.2f);
+
+	gi.Cvar_VariableStringBuffer( "ui_missionfailed_text", reason, sizeof(reason) );
+	text[0] = '\0';
+	cgi_SP_GetStringTextString( (reason[0] == '@') ? reason+1 : reason, text, sizeof(text) );
+	w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontMedium, 1.2f);
+	cgi_R_Font_DrawString(320 - w/2, y+30, text, colorTable[CT_HUD_RED], cgs.media.qhFontMedium, -1, 1.2f);
+
+	cgi_SP_GetStringTextString( "SP_INGAME_RELOADMISSION", text, sizeof(text) );
+	w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 1.0f);
+	cgi_R_Font_DrawString(320 - w/2, 450, text, colorTable[CT_CYAN], cgs.media.qhFontSmall, -1, 1.0f);
+}
+
 void CG_MissionFailed(void)
 {
 	char *text;
 
 	if (!cg.missionFailedScreen)
 	{
-		cgi_UI_SetActive_Menu("missionfailed_menu");
+		if ( !G_OutcastInterface() )
+		{
+			cgi_UI_SetActive_Menu("missionfailed_menu");
+		}
 		cg.missionFailedScreen = qtrue;
 
 		switch (statusTextIndex)
@@ -161,6 +190,11 @@ void CG_MissionFailed(void)
 		}
 
 		gi.cvar_set("ui_missionfailed_text", text);
+	}
+
+	if ( G_OutcastInterface() )
+	{
+		CG_DrawOutcastMissionFailed();
 	}
 //	w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontMedium, 1.2f);
 //		cgi_R_Font_DrawString(320 - w/2, y+30, text, colorTable[CT_HUD_RED], cgs.media.qhFontMedium, -1, 1.2f);

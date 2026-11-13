@@ -56,6 +56,61 @@ int obj_graphics[MAX_OBJ_GRAPHICS];
 
 qboolean CG_ForcePower_Valid(int forceKnownBits, int index);
 
+// How far the pictures under some of Jedi Outcast's objectives (CG_DrawOutcastObjectiveGraphic) have
+// moved the lines after them down
+static int objectiveGraphicsShift;
+
+// Where objective text starts: Jedi Outcast's menus have it further right and lower down
+static int CG_ObjectiveXpos( void )
+{
+	return G_OutcastInterface() ? 108 : objectiveStartingXpos;
+}
+
+static int CG_ObjectiveYpos( void )
+{
+	return ( G_OutcastInterface() ? 79 : objectiveStartingYpos ) + objectiveGraphicsShift;
+}
+
+/*
+====================
+CG_DrawOutcastObjectiveGraphic
+
+Jedi Outcast's story shows the security codes its puzzles need beneath their objectives: the door
+code on kejim_post (red, green and blue parts) and the communications code on doom_comm.
+====================
+*/
+static void CG_DrawOutcastObjectiveGraphic( const char *objectiveName, const int y )
+{
+	const char *shader;
+	int width = 32;
+
+	if ( !Q_stricmp( objectiveName, "DOOM_COMM_OBJ4" ) )
+	{
+		shader = "textures/system/securitycode";
+		width = 128;
+	}
+	else if ( !Q_stricmp( objectiveName, "KEJIM_POST_OBJ3" ) )
+	{
+		shader = "textures/system/securitycode_red";
+	}
+	else if ( !Q_stricmp( objectiveName, "KEJIM_POST_OBJ4" ) )
+	{
+		shader = "textures/system/securitycode_green";
+	}
+	else if ( !Q_stricmp( objectiveName, "KEJIM_POST_OBJ5" ) )
+	{
+		shader = "textures/system/securitycode_blue";
+	}
+	else
+	{
+		return;
+	}
+
+	cgi_R_SetColor( NULL );
+	CG_DrawPic( 320 - (width/2), y+8, width, 32, cgi_R_RegisterShaderNoMip( shader ) );
+	objectiveGraphicsShift += 32 + 4;
+}
+
 /*
 ====================
 ObjectivePrint_Line
@@ -108,7 +163,7 @@ static void ObjectivePrint_Line(const int color, const int objectIndex, int &mis
 		extern float gfAdvanceHack;
 
 		gfAdvanceHack = 1.0f;	// override internal vertical advance
-		y = objectiveStartingYpos + (iYPixelsPerLine * missionYcnt);
+		y = CG_ObjectiveYpos() + (iYPixelsPerLine * missionYcnt);
 
 		// Advance line if a graphic has printed
 		for (i=0;i<MAX_OBJ_GRAPHICS;i++)
@@ -120,7 +175,7 @@ static void ObjectivePrint_Line(const int color, const int objectIndex, int &mis
 		}
 
 		CG_DisplayBoxedText(
-			objectiveStartingXpos,
+			CG_ObjectiveXpos(),
 			y,
 			objectiveTextBoxWidth,
 			objectiveTextBoxHeight,
@@ -139,10 +194,10 @@ static void ObjectivePrint_Line(const int color, const int objectIndex, int &mis
 		//
 		if (pixelLen < objectiveTextBoxWidth)	// One shot - small enough to print entirely on one line
 		{
-			y =objectiveStartingYpos + (iYPixelsPerLine * (missionYcnt));
+			y =CG_ObjectiveYpos() + (iYPixelsPerLine * (missionYcnt));
 
 			cgi_R_Font_DrawString (
-				objectiveStartingXpos,
+				CG_ObjectiveXpos(),
 				y,
 				str,
 				colorTable[color],
@@ -191,10 +246,10 @@ static void ObjectivePrint_Line(const int color, const int objectIndex, int &mis
 					pixelLen = 0;
 					charLen = 1;
 
-					y = objectiveStartingYpos + (iYPixelsPerLine * missionYcnt);
+					y = CG_ObjectiveYpos() + (iYPixelsPerLine * missionYcnt);
 
 					CG_DrawProportionalString(
-						objectiveStartingXpos,
+						CG_ObjectiveXpos(),
 						y,
 						holdText,
 						CG_SMALLFONT,
@@ -208,11 +263,11 @@ static void ObjectivePrint_Line(const int color, const int objectIndex, int &mis
 
 					assert( charLen<maxHoldText );	// Too big?
 
-					y = objectiveStartingYpos + (iYPixelsPerLine * missionYcnt);
+					y = CG_ObjectiveYpos() + (iYPixelsPerLine * missionYcnt);
 
 					Q_strncpyz( holdText, strBegin, charLen);
 					CG_DrawProportionalString(
-						objectiveStartingXpos,
+						CG_ObjectiveXpos(),
 						y, holdText,
 						CG_SMALLFONT,
 						colorTable[color] );
@@ -229,7 +284,7 @@ static void ObjectivePrint_Line(const int color, const int objectIndex, int &mis
 
 	if (objectIndex == T3_BOUNTY_OBJ1 && !outcastObjective)
 	{
-		y =objectiveStartingYpos + (iYPixelsPerLine * missionYcnt);
+		y =CG_ObjectiveYpos() + (iYPixelsPerLine * missionYcnt);
 		if (obj_graphics[1])
 		{
 			y += OBJ_GRAPHIC_SIZE + 4;
@@ -243,6 +298,10 @@ static void ObjectivePrint_Line(const int color, const int objectIndex, int &mis
 		obj_graphics[3] = qtrue;
 	}
 
+	if ( outcastObjective )
+	{
+		CG_DrawOutcastObjectiveGraphic( objectiveName, CG_ObjectiveYpos() + (iYPixelsPerLine * missionYcnt) );
+	}
 }
 
 /*
@@ -257,11 +316,15 @@ void CG_DrawDataPadObjectives(const centity_t *cent )
 	int		i,totalY;
 	int		iYPixelsPerLine = cgi_R_Font_HeightPixels(cgs.media.qhFontMedium, 1.0f);
 
-	const short titleXPos = objectiveStartingXpos - 22;		// X starting position for title text
-	const short titleYPos = objectiveStartingYpos - 23;		// Y starting position for title text
+	objectiveGraphicsShift = 0;
+
+	// (Jedi Outcast's menus: white title, blue objectives, their circles hung from the middle of the line)
+	const qboolean outcastLayout = G_OutcastInterface();
+	const short titleXPos = CG_ObjectiveXpos() - (outcastLayout ? 12 : 22);		// X starting position for title text
+	const short titleYPos = CG_ObjectiveYpos() - 23;		// Y starting position for title text
 	const short graphic_size = 16;							// Size (width and height) of graphic used to show status of objective
-	const short graphicXpos = objectiveStartingXpos - graphic_size - 8;	// Amount of X to backup from text starting position
-	const short graphicYOffset = (iYPixelsPerLine - graphic_size)/2;	// Amount of Y to raise graphic so it's in the center of the text line
+	const short graphicXpos = CG_ObjectiveXpos() - graphic_size - (outcastLayout ? 4 : 8);	// Amount of X to backup from text starting position
+	const short graphicYOffset = outcastLayout ? 0 : (iYPixelsPerLine - graphic_size)/2;	// Amount of Y to raise graphic so it's in the center of the text line
 
 	missionInfo_Updated = qfalse;		// This will stop the text from flashing
 	cg.missionInfoFlashTime = 0;
@@ -275,7 +338,7 @@ void CG_DrawDataPadObjectives(const centity_t *cent )
 	// Title Text at the top
 	char text[1024]={0};
 	cgi_SP_GetStringTextString( "SP_INGAME_OBJECTIVES", text, sizeof(text) );
-	cgi_R_Font_DrawString (titleXPos, titleYPos, text, colorTable[CT_TITLE], cgs.media.qhFontMedium, -1, 1.0f);
+	cgi_R_Font_DrawString (titleXPos, titleYPos, text, colorTable[outcastLayout ? CT_WHITE : CT_TITLE], cgs.media.qhFontMedium, -1, 1.0f);
 
 	int missionYcnt = 0;
 
@@ -286,7 +349,7 @@ void CG_DrawDataPadObjectives(const centity_t *cent )
 		if (cent->gent->client->sess.mission_objectives[i].display)
 		{
 			// Calculate the Y position
-			totalY = objectiveStartingYpos + (iYPixelsPerLine * (missionYcnt))+(iYPixelsPerLine/2);
+			totalY = CG_ObjectiveYpos() + (iYPixelsPerLine * (missionYcnt))+(iYPixelsPerLine/2);
 
 			//	Draw graphics that show if mission has been accomplished or not
 			cgi_R_SetColor(colorTable[CT_BLUE3]);
@@ -297,18 +360,23 @@ void CG_DrawDataPadObjectives(const centity_t *cent )
 			}
 
 			// Print current objective text
-			ObjectivePrint_Line(CT_WHITE, i, missionYcnt );
+			ObjectivePrint_Line(outcastLayout ? CT_BLUE3 : CT_WHITE, i, missionYcnt );
 		}
 	}
 
 	// No mission text?
-	if (!missionYcnt)
+	if (!missionYcnt && outcastLayout)
+	{
+		cgi_SP_GetStringTextString( "SP_INGAME_OBJNONE", text, sizeof(text) );
+		cgi_R_Font_DrawString( CG_ObjectiveXpos(), CG_ObjectiveYpos(), text, colorTable[CT_LTBLUE1], cgs.media.qhFontMedium, -1, 1.0f );
+	}
+	else if (!missionYcnt)
 	{
 		// Set the message a quarter of the way down and in the center of the text box
-		int messageYPosition = objectiveStartingYpos + (objectiveTextBoxHeight / 4);
+		int messageYPosition = CG_ObjectiveYpos() + (objectiveTextBoxHeight / 4);
 
 		cgi_SP_GetStringTextString( "SP_INGAME_OBJNONE", text, sizeof(text) );
-		int messageXPosition = objectiveStartingXpos + (objectiveTextBoxWidth/2) -  (cgi_R_Font_StrLenPixels(text, cgs.media.qhFontMedium, 1.0f) /2);
+		int messageXPosition = CG_ObjectiveXpos() + (objectiveTextBoxWidth/2) -  (cgi_R_Font_StrLenPixels(text, cgs.media.qhFontMedium, 1.0f) /2);
 
 		cgi_R_Font_DrawString (
 			messageXPosition,
@@ -413,13 +481,14 @@ static void CG_LoadScreen_PersonalInfo(void)
 }
 */
 
-static void CG_LoadBar(void)
+// barBottom: where the bar ends (Jedi Outcast's sits on the bottom of the screen)
+static void CG_LoadBar( const int barBottom )
 {
 	const int numticks = 9, tickwidth = 40, tickheight = 8;
 	const int tickpadx = 20, tickpady = 12;
 	const int capwidth = 8;
 	const int barwidth = numticks*tickwidth+tickpadx*2+capwidth*2, barleft = ((640-barwidth)/2);
-	const int barheight = tickheight + tickpady*2, bartop = 475-barheight;
+	const int barheight = tickheight + tickpady*2, bartop = barBottom-barheight;
 	const int capleft = barleft+tickpadx, tickleft = capleft+capwidth, ticktop = bartop+tickpady;
 
 	cgi_R_SetColor( colorTable[CT_WHITE]);
@@ -791,6 +860,44 @@ static void CG_DrawLoadingScreen( qhandle_t	levelshot ,const char *mapName)
 
 /*
 ====================
+CG_DrawOutcastLoadingScreen
+
+Jedi Outcast's load screen (its menus have no "loadscreen" menu): the level's picture over the whole
+screen, in its shape. A new story begins on black with "A long time ago...".
+====================
+*/
+static void CG_DrawOutcastLoadingScreen( qhandle_t levelshot, const char *mapName )
+{
+	extern SavedGameJustLoaded_e g_eSavedGameJustLoaded;
+	static const vec4_t black = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+	// black beside the picture on a wide screen, and behind it while it loads
+	CG_FillRect( -SCREEN_WIDTH, 0, 3*SCREEN_WIDTH, SCREEN_HEIGHT, black );
+
+	if ( g_eSavedGameJustLoaded != eFULL && ( !strcmp( mapName, "kejim_post" ) || !strcmp( mapName, "yavin1" ) ) )
+	{//the first level of either story
+		char text[1024]={0};
+		cgi_SP_GetStringTextString( "SP_INGAME_ALONGTIME", text, sizeof(text) );
+
+		const int w = cgi_R_Font_StrLenPixels( text, cgs.media.qhFontMedium, 1.0f );
+		cgi_R_Font_DrawString( 320-(w/2), 140, text, colorTable[CT_ICON_BLUE], cgs.media.qhFontMedium, -1, 1.0f );
+		return;
+	}
+
+	// (a level without a picture stays black: the fallback is Jedi Academy's title art)
+	if ( !cgi_R_RegisterShaderNoMip( va( "levelshots/%s", mapName ) ) )
+	{
+		return;
+	}
+
+	cgi_R_SetColor( NULL );
+	cgi_R_Set2DAnchor( ANCHOR_KEEP_SHAPE );
+	CG_DrawPic( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, levelshot );
+	cgi_R_Set2DAnchor( ANCHOR_CENTRE );
+}
+
+/*
+====================
 CG_DrawInformation
 
 Draw all the status / pacifier stuff during level loading
@@ -824,7 +931,11 @@ void CG_DrawInformation( void ) {
 		}
 	}
 
-	if ( g_eSavedGameJustLoaded != eFULL && !strcmp(s,"yavin1") )//special case for first map!
+	if ( G_OutcastInterface() )
+	{
+		CG_DrawOutcastLoadingScreen( levelshot, s );
+	}
+	else if ( g_eSavedGameJustLoaded != eFULL && !strcmp(s,"yavin1") )//special case for first map!
 	{
 		char	text[1024]={0};
 
@@ -844,7 +955,7 @@ void CG_DrawInformation( void ) {
 		//cgi_UI_MenuPaintAll();
 	}
 
-	CG_LoadBar();
+	CG_LoadBar( G_OutcastInterface() ? 480 : 475 );
 
 
 	// the first 150 rows are reserved for the client connection

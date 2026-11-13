@@ -1254,6 +1254,7 @@ extern qboolean		com_fullyInitialized;
 
 #ifndef JK2_MODE
 static long FS_FOpenOutcastInterfaceFile( const char *filename, fileHandle_t *file, qboolean uniqueFILE );
+static qboolean FS_IsOutcastSave( const directory_t *dir, const char *filename );
 #endif
 
 long FS_FOpenFileRead( const char *filename, fileHandle_t *file, qboolean uniqueFILE ) {
@@ -1396,6 +1397,11 @@ long FS_FOpenFileRead( const char *filename, fileHandle_t *file, qboolean unique
 
 				dir = search->dir;
 
+#ifndef JK2_MODE
+				if ( FS_IsOutcastSave( dir, filename ) ) {
+					continue;
+				}
+#endif
 				netpath = FS_BuildOSPath( dir->path, dir->gamedir, filename );
 				fsh[*file].handleFiles.file.o = fopen (netpath, "rb");
 				if ( !fsh[*file].handleFiles.file.o ) {
@@ -1849,6 +1855,14 @@ static qboolean FS_IsInsideOutcastPath( const char *osPath ) {
 	}
 	return ( osPath[i] == '\0' || osPath[i] == '/' || osPath[i] == '\\' ) ? qtrue : qfalse;
 }
+
+// True for a games folder of Jedi Outcast's own engine (fs_outcastpath/base/saves): those saves are in
+// that engine's format, which this one can't read, so they are neither listed nor opened.
+static qboolean FS_IsOutcastSave( const directory_t *dir, const char *filename ) {
+	return ( fs_outcastpath && fs_outcastpath->string[0] && !Q_stricmpn( filename, "saves", 5 )
+		&& ( filename[5] == '/' || filename[5] == '\\' || filename[5] == '\0' )
+		&& FS_IsInsideOutcastPath( dir->path ) ) ? qtrue : qfalse;
+}
 #endif
 
 #ifndef JK2_MODE
@@ -2275,6 +2289,11 @@ char **FS_ListFilteredFiles( const char *path, const char *extension, char *filt
 			char	**sysFiles;
 			char	*name;
 
+#ifndef JK2_MODE
+			if ( FS_IsOutcastSave( search->dir, path ) ) {
+				continue;
+			}
+#endif
 			netpath = FS_BuildOSPath( search->dir->path, search->dir->gamedir, path );
 			sysFiles = Sys_ListFiles( netpath, extension, filter, &numSysFiles, qfalse );
 			for ( i = 0 ; i < numSysFiles ; i++ ) {
