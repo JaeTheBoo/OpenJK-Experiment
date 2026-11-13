@@ -66,6 +66,7 @@ void		R_ImagePrefetch_End( void );
 void		R_ImagePrefetch_Shutdown( void );
 qboolean	R_ImagePrefetch_Take( const char *shortname, byte **pic, int *width, int *height );	// zone memory, like R_LoadImage
 void		R_ImagePrefetch_Note( const char *fileName );	// this file was loaded
+void		R_ImagePrefetch_Forget( const char *const *folders, int numFolders );	// what was read from these is stale
 bool		R_DecodeTGAFromMemory( byte *buffer, size_t length, byte **pic, int *width, int *height );
 bool		R_DecodeJPGFromMemory( const byte *buffer, size_t length, byte **pic, int *width, int *height );
 

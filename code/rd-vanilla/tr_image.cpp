@@ -986,13 +986,16 @@ qboolean RE_RegisterImages_LevelLoadEnd(void)
 ================
 RE_PurgeImageFolders
 
-Drops the cached images whose names begin with one of these folders, so that the next shader to use one reads its file
-again, from wherever the file system finds it then. For a change to the interface of the other game (ui_style, see
+Drops the cached images whose names begin with one of these folders, and the ones read ahead for the level loading, so
+that the next shader to use one reads its file again, from wherever the file system finds it then. For a change to the interface of the other game (ui_style, see
 code/ui UI_OutcastStyle), whose pictures have the same names. An image a shader made so far still draws with is kept.
 ================
 */
 void RE_PurgeImageFolders( const char *const *folders, int numFolders )
 {
+	// (a level that is loading has read its images ahead, from where the file system found them before)
+	R_ImagePrefetch_Forget( folders, numFolders );
+
 	std::set<const image_t *> inUse;
 	for ( int i = 0; i < tr.numShaders; i++ )
 	{

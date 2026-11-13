@@ -61,6 +61,7 @@ struct Entry
 	byte		*pixels;	// RGBA, made with malloc
 	int			width, height;
 	size_t		estimate;	// bytes the decoded image is going to take (until it is known)
+	bool		forgotten;	// read from where the file system found it then, which has changed (R_ImagePrefetch_Forget)
 };
 
 std::vector<Entry *>				entries;
@@ -299,6 +300,7 @@ void R_ImagePrefetch_Begin( const char *mapName_ )
 		entry->pixels = NULL;
 		entry->width = entry->height = 0;
 		entry->estimate = jpeg ? (size_t)size * 10 : (size_t)size;
+		entry->forgotten = false;
 		entry->state = STATE_QUEUED;
 		{
 			std::lock_guard<std::mutex> guard( lock );
@@ -333,6 +335,10 @@ qboolean R_ImagePrefetch_Take( const char *shortname, byte **pic, int *width, in
 	Entry *entry = entries[found->second];
 
 	std::unique_lock<std::mutex> guard( lock );
+	if ( entry->forgotten )
+	{
+		return qfalse;
+	}
 	entryDone.wait( guard, [entry] { return entry->state != STATE_QUEUED; } );
 	if ( entry->state != STATE_DONE )
 	{
@@ -355,6 +361,34 @@ qboolean R_ImagePrefetch_Take( const char *shortname, byte **pic, int *width, in
 	*height = entry->height;
 	R_ImagePrefetch_Note( entry->file.c_str() );
 	return qtrue;
+}
+
+/*
+=================
+R_ImagePrefetch_Forget
+
+The images read ahead from these folders are not to be used: the file system now finds other files of those names
+(the interface of the other game, RE_PurgeImageFolders). They are loaded again when they are asked for.
+=================
+*/
+void R_ImagePrefetch_Forget( const char *const *folders, int numFolders )
+{
+	if ( !active )
+	{
+		return;
+	}
+	std::lock_guard<std::mutex> guard( lock );
+	for ( size_t i = 0; i < entries.size(); i++ )
+	{
+		for ( int f = 0; f < numFolders; f++ )
+		{
+			if ( !Q_stricmpn( entries[i]->file.c_str(), folders[f], (int)strlen( folders[f] ) ) )
+			{
+				entries[i]->forgotten = true;
+				break;
+			}
+		}
+	}
 }
 
 void R_ImagePrefetch_Note( const char *fileName )
