@@ -163,7 +163,13 @@ qboolean RE_RegisterModels_GetDiskFile( const char *psModelFileName, void **ppvB
 				return qtrue;
 			}
 
+#ifdef JK2_MODE
 		ri.FS_ReadFile( sModelName, ppvBuffer );
+#else
+		const long fileLength = ri.FS_ReadFile( sModelName, ppvBuffer );
+		// Jedi Outcast's campaign: its animations are added to Jedi Academy's skeleton
+		*ppvBuffer = R_Outcast_AddAnimationsToSkeleton( sModelName, *ppvBuffer, fileLength );
+#endif
 		*pqbAlreadyCached = qfalse;
 
 		return (qboolean)(*ppvBuffer != 0);

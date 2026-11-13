@@ -31,6 +31,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "g_vehicles.h"
 #include "objectives.h"
 #include "b_local.h"
+#include "g_outcast.h"
 
 extern int WP_SaberInitBladeData( gentity_t *ent );
 extern void G_CreateG2AttachedWeaponModel( gentity_t *ent, const char *weaponModel, int boltNum, int weaponNum );
@@ -2232,7 +2233,7 @@ qboolean ClientSpawn(gentity_t *ent, SavedGameJustLoaded_e eSavedGameJustLoaded 
 			ent->NPC_type = (char *)"player";
 		}
 		ent->classname = "player";
-		ent->targetname = ent->script_targetname = "player";
+		ent->targetname = ent->script_targetname = (char *)G_PlayerScriptName();	// "kyle" in Jedi Outcast's campaign
 		if ( ent->client->NPC_class == CLASS_NONE )
 		{
 			ent->client->NPC_class = CLASS_PLAYER;
@@ -2277,6 +2278,11 @@ qboolean ClientSpawn(gentity_t *ent, SavedGameJustLoaded_e eSavedGameJustLoaded 
 		}
 		// force the base weapon up
 		client->ps.weaponstate = WEAPON_READY;
+
+		if ( G_IsOutcastCampaign() )
+		{//Kyle also carries his Bryar pistol (see g_outcast.h)
+			G_Outcast_GiveStartingGear( ent );
+		}
 
 		for ( i = FIRST_WEAPON; i < MAX_PLAYER_WEAPONS; i++ ) // don't give ammo for explosives
 		{

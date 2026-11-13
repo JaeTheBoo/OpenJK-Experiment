@@ -887,6 +887,60 @@ static qboolean UI_DeferMenuScript ( const char **args )
 	return qfalse;
 }
 
+#ifndef JK2_MODE
+/*
+===============
+Jedi Outcast's campaign
+
+The campaign chooser can start this program with Jedi Outcast's game data beneath Jedi Academy's
+(fs_outcastpath). That campaign has no character to create: the player is Kyle Katarn, played with
+Jedi Academy's remade model, so New Game goes from the difficulty choice straight into its first level.
+===============
+*/
+static void UI_SetSexandSoundForModel( const char *char_model );
+
+static qboolean UI_IsOutcastCampaign( void )
+{
+	return Cvar_VariableString( "fs_outcastpath" )[0] ? qtrue : qfalse;
+}
+
+static void UI_StartOutcastCampaign( void )
+{
+	Cvar_Set( "name", "Kyle" );
+	Cvar_Set( "g_char_model", "kyle" );
+	Cvar_Set( "g_char_skin_head", "model_default" );
+	Cvar_Set( "g_char_skin_torso", "model_default" );
+	Cvar_Set( "g_char_skin_legs", "model_default" );
+	Cvar_Set( "g_char_color_red", "255" );
+	Cvar_Set( "g_char_color_green", "255" );
+	Cvar_Set( "g_char_color_blue", "255" );
+	UI_SetSexandSoundForModel( "kyle" );
+
+	// Kyle's blue saber, held in the medium style
+	Cvar_Set( "g_saber_type", "single" );
+	Cvar_Set( "g_saber", "kyle" );
+	Cvar_Set( "g_saber2", "" );
+	Cvar_Set( "g_saber_color", "blue" );
+	Cvar_Set( "g_saber2_color", "blue" );
+	Cvar_Set( "g_fighting_style", va( "%d", SS_MEDIUM ) );
+
+	Menus_CloseAll();
+	ui.Cmd_ExecuteText( EXEC_APPEND, "map kejim_post\n" );
+}
+
+// Called when a menu script opens a menu. In Jedi Outcast's campaign, the character creation that
+// follows the difficulty choice starts the game instead. Returns qtrue if the menu was replaced.
+qboolean UI_OutcastCampaign_OpenMenu( const char *menuName )
+{
+	if ( !UI_IsOutcastCampaign() || Q_stricmp( menuName, "characterMenu" ) )
+	{
+		return qfalse;
+	}
+	UI_StartOutcastCampaign();
+	return qtrue;
+}
+#endif // !JK2_MODE
+
 /*
 ===============
 UI_RunMenuScript
@@ -1063,7 +1117,14 @@ static qboolean UI_RunMenuScript ( const char **args )
 #ifdef JK2_MODE
 			ui.Cmd_ExecuteText( EXEC_APPEND, "map kejim_post\n" );
 #else
-			ui.Cmd_ExecuteText( EXEC_APPEND, "map yavin1\n");
+			if ( UI_IsOutcastCampaign() )
+			{
+				UI_StartOutcastCampaign();
+			}
+			else
+			{
+				ui.Cmd_ExecuteText( EXEC_APPEND, "map yavin1\n");
+			}
 #endif
 		}
 		else if (Q_stricmp(name, "startmap") == 0)

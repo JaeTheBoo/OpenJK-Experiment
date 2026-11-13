@@ -1145,6 +1145,7 @@ void CL_InitRef( void ) {
 	RIT(FS_ListFiles);
 	RIT(FS_Read);
 	RIT(FS_ReadFile);
+	RIT(FS_ReadOutcastFile);
 	RIT(FS_Write);
 	RIT(FS_WriteFile);
 	RIT(Hunk_ClearToMark);

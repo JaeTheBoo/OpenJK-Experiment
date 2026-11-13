@@ -1810,6 +1810,325 @@ typedef enum //# animNumber_e
 	BOTH_CIN_49,		//# Level specific cinematic
 	BOTH_CIN_50,		//# Level specific cinematic
 
+	// Jedi Outcast's animations that Jedi Academy dropped, for Jedi Outcast's campaign. Their frames
+	// come from Jedi Outcast's skeleton, appended to Jedi Academy's (tr_outcast_skeleton.cpp), and
+	// their entries from Jedi Outcast's animation.cfg (G_Outcast_AddAnimations).
+	// Saved games hold only the animations before them (animFileSet_t), so saves made before these
+	// were added still load; Jedi Outcast's are filled in again after loading.
+	MAX_ACADEMY_ANIMATIONS,
+	BOTH_DEADFLOP3 = MAX_ACADEMY_ANIMATIONS,		//# React to being shot from Third Death finished pose
+	BOTH_DEADFLOP4,		//# React to being shot from Fourth Death finished pose
+	BOTH_DEADFLOP5,		//# React to being shot from Fifth Death finished pose
+	BOTH_DEADFORWARD1_FLOP,		//# React to being shot First thrown forward death finished pose
+	BOTH_DEADFORWARD2_FLOP,		//# React to being shot Second thrown forward death finished pose
+	BOTH_DEADBACKWARD1_FLOP,		//# React to being shot First thrown backward death finished pose
+	BOTH_DEADBACKWARD2_FLOP,		//# React to being shot Second thrown backward death finished pose
+	BOTH_LYINGDEAD1_FLOP,		//# React to being shot Killed lying down death finished pose
+	BOTH_STUMBLEDEAD1_FLOP,		//# React to being shot Stumble forward death finished pose
+	BOTH_FALLDEAD1_FLOP,		//# React to being shot Fall forward and splat death finished pose
+	BOTH_PAIN19,		//#
+	BOTH_PAIN20,		//# GETTING SHOCKED
+	BOTH_ATTACK2IDLE1,		//# Idle with one-handed pistol
+	BOTH_ATTACK8,		//# Attack with ???
+	BOTH_ATTACK9,		//# Attack with rocket launcher
+	BOTH_ATTACK12,		//# Attack with detpack
+	BOTH_MELEE3,		//# Third melee attack
+	BOTH_MELEE4,		//# Fourth melee attack
+	BOTH_MELEE5,		//# Fifth melee attack
+	BOTH_MELEE6,		//# Sixth melee attack
+	BOTH_STAND4IDLE1,		//# Random standing idle
+	BOTH_STAND7,		//# both hands on hips (female)
+	BOTH_STAND1TO3,		//# Transition from stand1 to stand3
+	BOTH_STAND3TO1,		//# Transition from stand3 to stand1
+	BOTH_STANDTOWALK1,		//# Transition from stand1 to walk1
+	BOTH_STANDUP1,		//# standing up and stumbling
+	BOTH_STAND1_REELO,		//# Reelo in his stand1 position (cin #18)
+	BOTH_STAND5_REELO,		//# Reelo in his stand5 position (cin #18)
+	BOTH_ALERT1,		//# Startled by something while on guard
+	BOTH_GESTURE3,		//# Generic gesture, non-specific
+	BOTH_TALKGESTURE2,		//# Generic talk anim
+	BOTH_TALKGESTURE3,		//# Generic talk anim
+	BOTH_TALKGESTURE4START,		//# Beginning talk anim 4
+	BOTH_TALKGESTURE4,		//# Talk gesture 4
+	BOTH_TALKGESTURE4STOP,		//# Ending talk anim 4
+	BOTH_TALKGESTURE5START,		//# Start hand on chin
+	BOTH_TALKGESTURE5,		//# Hand on chin
+	BOTH_TALKGESTURE5STOP,		//# Stop hand on chin
+	BOTH_TALKGESTURE6START,		//# Starting Motions to self
+	BOTH_TALKGESTURE6,		//# Pointing at self
+	BOTH_TALKGESTURE6STOP,		//# Ending Motions to self
+	BOTH_TALKGESTURE7START,		//# Start touches Kyle on shoulder
+	BOTH_TALKGESTURE7,		//# Hold touches Kyle on shoulder
+	BOTH_TALKGESTURE7STOP,		//# Ending touches Kyle on shoulder
+	BOTH_TALKGESTURE8START,		//# Lando's chin hold
+	BOTH_TALKGESTURE8,		//# Lando's chin hold
+	BOTH_TALKGESTURE8STOP,		//# Lando's chin hold
+	BOTH_TALKGESTURE9,		//# Same as gesture 2 but with the right hand
+	BOTH_TALKGESTURE10,		//# Shoulder shrug
+	BOTH_TALKGESTURE11START,		//# Arms folded across chest
+	BOTH_TALKGESTURE11STOP,		//# Arms folded across chest
+	BOTH_TALKGESTURE12,		//# Tavion taunting Kyle
+	BOTH_TALKGESTURE13START,		//# Luke warning Kyle
+	BOTH_TALKGESTURE13,		//# Luke warning Kyle
+	BOTH_TALKGESTURE13STOP,		//# Luke warning Kyle
+	BOTH_TALKGESTURE14,		//# Luke gesturing to Kyle
+	BOTH_TALKGESTURE15START,		//# Desann taunting Kyle
+	BOTH_TALKGESTURE15,		//# Desann taunting Kyle
+	BOTH_TALKGESTURE15STOP,		//# Desann taunting Kyle
+	BOTH_TALKGESTURE16,		//# Bartender gesture cin #15
+	BOTH_TALKGESTURE17,		//# Bartender gesture cin #15
+	BOTH_TALKGESTURE18,		//# Bartender gesture cin #15
+	BOTH_TALKGESTURE19START,		//# Desann lifting his arm "Join me" (cin #34)
+	BOTH_TALKGESTURE19STOP,		//# Desann lifting his arm "Join me" (cin #34)
+	BOTH_TALKGESTURE20START,		//# Kyle lifting his arm "Join us" (cin #34)
+	BOTH_TALKGESTURE21,		//# generic talk gesture from stand3
+	BOTH_TALKGESTURE22,		//# generic talk gesture from stand3
+	BOTH_TALKGESTURE23,		//# generic talk gesture from stand3
+	BOTH_PAUSE1START,		//# Luke pauses to warn Kyle (cin #24) start
+	BOTH_PAUSE1STOP,		//# Luke pauses to warn Kyle (cin #24) stop
+	BOTH_HEADSHAKE1_REELO,		//# Head shake NO for Reelo
+	BOTH_SITHEADTILTLSTART,		//# Head tilt to left from seated position
+	BOTH_SITHEADTILTLSTOP,		//# Head tilt to left from seated position
+	BOTH_SITHEADTILTRSTART,		//# Head tilt to right from seated position
+	BOTH_SITHEADTILTRSTOP,		//# Head tilt to right from seated position
+	BOTH_SITHEADNOD,		//# Head shake YES from seated position
+	BOTH_SITHEADSHAKE,		//# Head shake NO from seated position
+	BOTH_EXAMINE1START,		//# Start Mon Mothma examining crystal
+	BOTH_EXAMINE1,		//# Mon Mothma examining crystal
+	BOTH_EXAMINE1STOP,		//# Stop Mon Mothma examining crystal
+	BOTH_EXAMINE2START,		//# Start Kyle tossing crystal
+	BOTH_EXAMINE2,		//# Hold Kyle tossing crystal
+	BOTH_EXAMINE2STOP,		//# End Kyle tossing crystal
+	BOTH_EXAMINE3START,		//# Start Lando looking around corner
+	BOTH_EXAMINE3,		//# Hold Lando looking around corner
+	BOTH_EXAMINE3STOP,		//# End Lando looking around corner
+	BOTH_LEANLEFT2START,		//# Start leaning left in chair
+	BOTH_LEANLEFT2STOP,		//# Stop leaning left in chair
+	BOTH_LEANRIGHT3START,		//# Start Lando leaning on wall
+	BOTH_LEANRIGHT3,		//# Lando leaning on wall
+	BOTH_LEANRIGHT3STOP,		//# Stop Lando leaning on wall
+	BOTH_FORCEFOUNTAIN1_START,		//# Kyle being lifted into the Force Fountain (cin #10)
+	BOTH_FORCEFOUNTAIN1_MIDDLE,		//# Kyle changing to looping position in the Force Fountain (cin #10)
+	BOTH_FORCEFOUNTAIN1_LOOP,		//# Kyle being spun in the Force Fountain (cin #10)
+	BOTH_FORCEFOUNTAIN1_STOP,		//# Kyle being set down out of the Force Fountain (cin #10)
+	BOTH_THUMBING1,		//# Lando gesturing with thumb over his shoulder (cin #19)
+	BOTH_PUNCHER1,		//# Jan punching Kyle in the shoulder (cin #37)
+	BOTH_CONSTRAINER1HOLD,		//# Static pose of starting Tavion constraining Jan (cin #9)
+	BOTH_CONSTRAINEE1HOLD,		//# Static pose of starting Jan being constrained by Tavion (cin #9)
+	BOTH_CONSTRAINER1STAND,		//# Tavion constraining Jan in a stand pose (cin #9)
+	BOTH_CONSTRAINEE1STAND,		//# Jan being constrained in a stand pose (cin #9)
+	BOTH_CONSTRAINER1WALK,		//# Tavion shoving jan forward (cin #9)
+	BOTH_CONSTRAINEE1WALK,		//# Jan being shoved forward by Tavion (cin #9)
+	BOTH_CONSTRAINER1LOOP,		//# Tavion walking with Jan in a loop (cin #9)
+	BOTH_CONSTRAINEE1LOOP,		//# Jan walking with Tavion in a loop (cin #9)
+	BOTH_HANDSHAKER1START,		//# Luke shaking Kyle's hand (cin #37)
+	BOTH_HANDSHAKER1LOOP,		//# Luke shaking Kyle's hand (cin #37)
+	BOTH_HANDSHAKEE1START,		//# Kyle shaking Luke's hand (cin #37)
+	BOTH_HANDSHAKEE1LOOP,		//# Kyle shaking Luke's hand (cin #37)
+	BOTH_LAUGH1START,		//# Reelo leaning forward before laughing (cin #18)
+	BOTH_LAUGH1STOP,		//# Reelo laughing (cin #18)
+	BOTH_ESCAPEPOD_LEAVE1,		//# Kyle leaving escape pod (cin #33)
+	BOTH_ESCAPEPOD_LEAVE2,		//# Jan leaving escape pod (cin #33)
+	BOTH_HUGGERSTOP2,		//# Kyle let go of Jan and step back (cin #29)
+	BOTH_HUGGEESTOP2,		//# Jan released from hug (cin #29)
+	BOTH_KISSER1,		//# Temp until the Kiss anim gets split up
+	BOTH_KISSER1START1,		//# Kyle start kissing Jan
+	BOTH_KISSER1START2,		//# Kyle start kissing Jan
+	BOTH_KISSER1LOOP,		//# Kyle loop kissing Jan
+	BOTH_KISSER1STOP,		//# Temp until the Kiss anim gets split up
+	BOTH_KISSER1STOP1,		//# Kyle stop kissing but don't let go
+	BOTH_KISSER1STOP2,		//# Kyle step back from Jan
+	BOTH_KISSEE1,		//# Temp until the Kiss anim gets split up
+	BOTH_KISSEE1START1,		//# Jan start being kissed
+	BOTH_KISSEE1START2,		//# Jan start being kissed
+	BOTH_KISSEE1LOOP,		//# Jan loop being kissed
+	BOTH_KISSEE1STOP,		//# Temp until the Kiss anim gets split up
+	BOTH_KISSEE1STOP1,		//# Jan stop being kissed but don't let go
+	BOTH_KISSEE1STOP2,		//# Jan wait for Kyle to step back
+	BOTH_BARTENDER_IDLE1,		//# Bartender idle in cin #15
+	BOTH_BARTENDER_THROW1,		//# Bartender throws glass in cin #15
+	BOTH_BARTENDER_COWERSTART,		//# Start of Bartender raising both hands up in surrender (cin #16)
+	BOTH_BARTENDER_COWERLOOP,		//# Loop of Bartender waving both hands in surrender (cin #16)
+	BOTH_BARTENDER_COWER,		//# Single frame of Bartender waving both hands in surrender (cin #16)
+	BOTH_THREATEN1_START,		//# First frame of Kyle threatening Bartender with lightsaber (cin #16)
+	BOTH_THREATEN1,		//# Kyle threatening Bartender with lightsaber (cin #16)
+	BOTH_RADIO_ONOFF,		//# Mech Galak turning on his suit radio (cin #32)
+	BOTH_TRIUMPHANT1START,		//# Mech Galak raising his arms in victory (cin #32)
+	BOTH_TRIUMPHANT1STARTGESTURE,		//# Mech Galak raising his arms in victory (cin #32)
+	BOTH_TRIUMPHANT1STOP,		//# Mech Galak lowering his arms in victory (cin #32)
+	BOTH_COVERUP1_LOOP,		//# animation of getting in line of friendly fire
+	BOTH_COVERUP1_START,		//# transitions from stand to coverup1_loop
+	BOTH_COVERUP1_END,		//# transitions from coverup1_loop to stand
+	BOTH_INJURED4,		//# Injured pose 4
+	BOTH_INJURED4TO5,		//# Transition from INJURED4 to INJURED5
+	BOTH_INJURED5,		//# Injured pose 5
+	BOTH_SIT1STAND,		//# Stand up from First sitting anim
+	BOTH_SIT2TO3,		//# Trans from sit2 to sit3?
+	BOTH_SIT3TO1,		//# Trans from sit3 to sit1?
+	BOTH_SIT3TO2,		//# Trans from sit3 to sit2?
+	BOTH_SIT4TO5,		//# Trans from sit4 to sit5
+	BOTH_SIT4TO6,		//# Trans from sit4 to sit6
+	BOTH_SIT5TO4,		//# Trans from sit5 to sit4
+	BOTH_SIT5TO6,		//# Trans from sit5 to sit6
+	BOTH_SIT6TO4,		//# Trans from sit6 to sit4
+	BOTH_SIT6TO5,		//# Trans from sit6 to sit5
+	BOTH_SIT7TOSTAND1,		//# getting up from sit7 into stand1
+	BOTH_CROUCH2IDLE,		//# crouch and resting on back righ heel, no weapon
+	BOTH_GET_UP1,		//# Get up from the ground, face down
+	BOTH_GET_UP2,		//# Get up from the ground, face up
+	BOTH_COCKPIT_SIT,		//# sit in a cockpit.
+	BOTH_RUMMAGE1START,		//# Kyle rummaging for crystal (cin 2)
+	BOTH_RUMMAGE1,		//# Kyle rummaging for crystal (cin 2)
+	BOTH_RUMMAGE1STOP,		//# Kyle rummaging for crystal (cin 2)
+	BOTH_HOLDGLASS1,		//# Bartender holds glass (cin# 14)
+	BOTH_SLIDEGLASS1,		//# Bartender slides glass (cin# 14)
+	BOTH_SLAMSABERDOWN,		//# Kyle slamming his saber on the bar top (cin# 14)
+	BOTH_WALK3,		//# Goes with stand3
+	BOTH_WALK4,		//# Walk cycle goes to a stand4
+	BOTH_WALK8,		//# Normal walk with hands behind back (Luke in cin#12)
+	BOTH_WALK9,		//# Lando walk (cin #17)
+	BOTH_WALK10,		//# Lando walk (cin #17)
+	BOTH_WALKTORUN1,		//# transition from walk to run
+	BOTH_RUNINJURED1,		//# Run with injured left leg
+	BOTH_RUNAWAY1,		//# Running scared
+	BOTH_SWIM1,		//# Swimming
+	BOTH_ROLL_FR,		//# Roll forward right
+	BOTH_ROLL_FL,		//# Roll forward left
+	BOTH_ROLL_BR,		//# Roll back right
+	BOTH_ROLL_BL,		//# Roll back left
+	BOTH_DIVE1,		//# Dive!
+	BOTH_WALL_FLIP_FWD,		//#
+	BOTH_DEATHFROMBACKSLASH,		//#
+	BOTH_ONLADDER_BOT1,		//# Getting on the ladder at the bottom
+	BOTH_OFFLADDER_BOT1,		//# Getting off the ladder at the bottom
+	BOTH_ONLADDER_TOP1,		//# Getting on the ladder at the top
+	BOTH_OFFLADDER_TOP1,		//# Getting off the ladder at the top
+	BOTH_LIFT1,		//# Lifting someone/thing over their shoulder
+	BOTH_STEP1,		//# telsia checking out lake cinematic9.2
+	BOTH_HITWALL1,		//# cin.18, Kenn hit by borg into wall 56 units away
+	BOTH_AMBUSHLAND1,		//# landing from fall on victim
+	BOTH_BIRTH1,		//# birth from jumping through walls
+	BOTH_FLY_IDLE1,		//# Flying Idle 1
+	BOTH_FLY_IDLE2,		//# Flying Idle 2
+	BOTH_FLY_START1,		//# Start flying
+	BOTH_FLY_STOP1,		//# Stop flying
+	BOTH_FLY_LOOP1,		//# Normal flying, should loop
+	BOTH_FLOAT1,		//# Crew floating through space 1
+	BOTH_FLOAT2,		//# Crew floating through space 2
+	BOTH_FLOATCONSOLE1,		//# Crew floating and working on console
+	BOTH_LIE_DOWN1,		//# From a stand position, get down on ground, face down
+	BOTH_LIE_DOWN2,		//# From a stand position, get down on ground, face up
+	BOTH_LIE_DOWN3,		//# reaction to local disnode being destroyed
+	BOTH_PAIN2WRITHE1,		//# Transition from upright position to writhing on ground anim
+	BOTH_PRONE2RLEG,		//# Lying on ground reach to grab right leg
+	BOTH_PRONE2LLEG,		//# Lying on ground reach to grab left leg
+	BOTH_WRITHING1,		//# Lying on ground on back writhing in pain
+	BOTH_WRITHING1RLEG,		//# Lying on ground writhing in pain, holding right leg
+	BOTH_WRITHING1LLEG,		//# Lying on ground writhing in pain, holding left leg
+	BOTH_WRITHING2,		//# Lying on ground on front writhing in pain
+	BOTH_INJURED1,		//# Lying down, against wall - can also be sleeping against wall
+	BOTH_INJURED2,		//# Injured pose 2
+	BOTH_INJURED3,		//# Injured pose 3
+	BOTH_INJURED6,		//# Injured pose 6
+	BOTH_INJURED6ATTACKSTART,		//# Start attack while in injured 6 pose
+	BOTH_INJURED6ATTACKSTOP,		//# End attack while in injured 6 pose
+	BOTH_INJURED6COMBADGE,		//# Hit combadge while in injured 6 pose
+	BOTH_INJURED6POINT,		//# Chang points to door while in injured state
+	BOTH_INJUREDTOSTAND1,		//# Runinjured to stand1
+	BOTH_PROPUP1,		//# Kyle getting up from having been knocked down (cin #9 end)
+	BOTH_CRAWLBACK1,		//# Lying on back, crawling backwards with elbows
+	BOTH_SITWALL1,		//# Sitting against a wall
+	BOTH_SLEEP2,		//# on floor-back against wall-arms crossed
+	BOTH_SLEEP3,		//# Sleeping in a chair
+	BOTH_SLEEP4,		//# Sleeping slumped over table
+	BOTH_SLEEP5,		//# Laying on side sleeping on flat sufrace
+	BOTH_SLEEP2GETUP,		//# alarmed and getting up out of sleep2 pose to stand
+	BOTH_SLEEP3GETUP,		//# alarmed and getting up out of sleep3 pose to stand
+	BOTH_SLEEP3DEATH,		//# death in chair, from sleep3 idle
+	BOTH_SLEEP3DEAD,		//# death in chair, from sleep3 idle
+	BOTH_SLEEP_IDLE1,		//# rub face and nose while asleep from sleep pose 1
+	BOTH_SLEEP_IDLE2,		//# shift position while asleep - stays in sleep2
+	BOTH_SLEEP_IDLE3,		//# Idle anim from sleep pose 3
+	BOTH_SLEEP_IDLE4,		//# Idle anim from sleep pose 4
+	BOTH_SLEEP1_NOSE,		//# Scratch nose from SLEEP1 pose
+	BOTH_SLEEP2_SHIFT,		//# Shift in sleep from SLEEP2 pose
+	BOTH_RESTRAINED1,		//# Telsia tied to medical table
+	BOTH_RESTRAINED1POINT,		//# Telsia tied to medical table pointing at Munro
+	BOTH_LIFTED1,		//# Fits with BOTH_LIFT1, lifted on shoulder
+	BOTH_CARRIED1,		//# Fits with TORSO_CARRY1, carried over shoulder
+	BOTH_CARRIED2,		//# Laying over object
+	BOTH_COCKPIT_TALKR1START,		//# turn head from straight forward to looking full right
+	BOTH_COCKPIT_TALKR1STARTTOMID,		//# from TALKR1START to looking at hologram (cin #1)
+	BOTH_COCKPIT_TALKR1MIDTOSTART,		//# from looking at hologram to TALKR1START (cin #1)
+	BOTH_COCKPIT_TALKR1STOP,		//# return head to straight forward from BOTH_COCKPIT_TALKR1
+	BOTH_COCKPIT_TALKR1STOPTOMID,		//# from TALKR1STOP to TALKR1MID
+	BOTH_COCKPIT_TALKR1MIDTOSTOP,		//# from looking at hologram to TALKR1STOP (cin #1)
+	BOTH_COCKPIT_TALKR1,		//# talk to right side
+	BOTH_COCKPIT_TALKL1START,		//# turn head from straight forward to looking full left
+	BOTH_COCKPIT_TALKL1STARTTOMID,		//# from TALKL1START to looking at hologram (cin #1)
+	BOTH_COCKPIT_TALKL1MIDTOSTART,		//# from looking at hologram to TALKL1START (cin #1)
+	BOTH_COCKPIT_TALKL1STOP,		//# return head to straight forward from BOTH_COCKPIT_TALKL1
+	BOTH_COCKPIT_TALKL1STOPTOMID,		//# from TALKL1STOP to TALKL1MID
+	BOTH_COCKPIT_TALKL1MIDTOSTOP,		//# from looking at hologram to TALKL1STOP (cin #1)
+	BOTH_COCKPIT_TALKL1,		//# talk to left side
+	BOTH_COCKPIT_CONSOLE1,		//# type at controls
+	BOTH_COCKPIT_CONSOLE2,		//# type at controls
+	BOTH_COCKPIT_CONSOLE2_PARTIAL,		//# last part of console2 anim (cin #1) used by Jan
+	BOTH_COCKPIT_HEADNOD,		//# nod head yes while sitting
+	BOTH_COCKPIT_HEADSHAKE,		//# shake head no while sitting
+	BOTH_COCKPIT_HEADTILTLSTART,		//# start tilt head left while sitting
+	BOTH_COCKPIT_HEADTILTLSTOP,		//# stop tilt head left while sitting
+	BOTH_COCKPIT_HEADTILTRSTART,		//# start tilt head right while sitting
+	BOTH_COCKPIT_HEADTILTRSTOP,		//# stop tilt head right while sitting
+	BOTH_COCKPIT_TALKGESTURE7START,		//# Lando's supporting hand to Kyle (cin #21)
+	BOTH_COCKPIT_TALKGESTURE7STOP,		//# Lando's supporting hand away from Kyle (cin #21)
+	BOTH_COCKPIT_TALKGESTURE8START,		//# Hand to Lando's chin (cin #21)
+	BOTH_COCKPIT_TALKGESTURE8STOP,		//# hand away from Lando's chin *cin #21)
+	BOTH_COCKPIT_TALKGESTURE11START,		//#
+	BOTH_COCKPIT_TALKGESTURE11STOP,		//#
+	BOTH_COCKPIT_SLEEP6START,		//#
+	BOTH_COCKPIT_SLEEP6STOP,		//#
+	TORSO_DROPWEAP2,		//# Put weapon away
+	TORSO_DROPWEAP3,		//# Put weapon away
+	TORSO_RAISEWEAP2,		//# Draw Weapon
+	TORSO_RAISEWEAP3,		//# Draw Weapon
+	TORSO_WEAPONREADY5,		//# Ready to fire bowcaster
+	TORSO_WEAPONREADY6,		//# Ready to fire ???
+	TORSO_WEAPONREADY7,		//# Ready to fire ???
+	TORSO_WEAPONREADY8,		//# Ready to fire ???
+	TORSO_WEAPONREADY9,		//# Ready to fire rocket launcher
+	TORSO_WEAPONREADY11,		//# Ready to fire laser trap
+	TORSO_WEAPONREADY12,		//# Ready to fire detpack
+	TORSO_WEAPONIDLE1,		//# Holding stun baton
+	TORSO_WEAPONIDLE5,		//# Holding bowcaster
+	TORSO_WEAPONIDLE6,		//# Holding ???
+	TORSO_WEAPONIDLE7,		//# Holding ???
+	TORSO_WEAPONIDLE8,		//# Holding ???
+	TORSO_WEAPONIDLE9,		//# Holding rocket launcher
+	TORSO_WEAPONIDLE11,		//# Holding laser trap
+	TORSO_WEAPONIDLE12,		//# Holding detpack
+	TORSO_HANDGESTURE1,		//# gestures to left one hand
+	TORSO_HANDGESTURE2,		//# gestures to right one hand
+	TORSO_HANDGESTURE3,		//# gestures to the left both hands
+	TORSO_HANDGESTURE4,		//# gestures to the right both hands
+	TORSO_HANDEXTEND1,		//# doctor reaching for hypospray in scav5
+	TORSO_HANDRETRACT1,		//# doctor taking hypospray from player in scav5
+	TORSO_DROPHELMET1,		//# Drop the helmet to the waist
+	TORSO_RAISEHELMET1,		//# Bring the helmet to the head
+	TORSO_REACHHELMET1,		//# reaching for helmet off of 60 tall cabinet
+	TORSO_GRABLBACKL,		//# reach to lower back with left hand
+	TORSO_GRABUBACKL,		//# reach to upper back with left hand
+	TORSO_GRABLBACKR,		//# reach to lower back with right hand
+	TORSO_GRABUBACKR,		//# reach to upper back with right hand
+	LEGS_WALKBACK1,		//# Walk1 backwards
+	LEGS_WALKBACK2,		//# Walk2 backwards
+	LEGS_RUNBACK1,		//# Run1 backwards
+	LEGS_RUNBACK2,		//# Run2 backwards
+	LEGS_KNEELDOWN1,		//# Get down on one knee?
+	LEGS_KNEELUP1,		//# Get up from one knee?
+	LEGS_CRLEAN_LEFT1,		//# Crouch Lean left
+	LEGS_CRLEAN_RIGHT1,		//# Crouch Lean Right
+
 	//# #eol
 	MAX_ANIMATIONS,
 	MAX_TOTALANIMATIONS,

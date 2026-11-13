@@ -942,6 +942,7 @@ void SV_InitGameProgs (void) {
 	import.FS_FCloseFile = FS_FCloseFile;
 	import.FS_ReadFile = FS_ReadFile;
 	import.FS_FreeFile = FS_FreeFile;
+	import.FS_ReadOutcastFile = FS_ReadOutcastFile;
 	import.FS_GetFileList = FS_GetFileList;
 
 	import.saved_game = &ojk::SavedGame::get_instance();

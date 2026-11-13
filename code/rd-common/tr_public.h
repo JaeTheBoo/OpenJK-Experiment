@@ -127,6 +127,10 @@ typedef struct {
 	qboolean			*(*gbAlreadyDoingLoad)				( void );
 	int					(*com_frameTime)					( void );
 
+	// Reads a file from Jedi Outcast's game data only (fs_outcastpath), even where Jedi Academy has a
+	// file of the same name. -1 if not there. Free with FS_FreeFile.
+	long				(*FS_ReadOutcastFile)				( const char *qpath, void **buffer );
+
 } refimport_t;
 
 extern refimport_t ri;

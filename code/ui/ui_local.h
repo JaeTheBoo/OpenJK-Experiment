@@ -246,6 +246,11 @@ void			trap_S_StartLocalSound( sfxHandle_t sfx, int channelNum );
 
 void _UI_Refresh( int realtime );
 
+#ifndef JK2_MODE
+// Jedi Outcast's campaign (ui_main.cpp): replaces character creation with the start of the game.
+qboolean UI_OutcastCampaign_OpenMenu( const char *menuName );
+#endif
+
 #define MAX_FONTS 64
 extern int registeredFontsCount;
 extern int registeredFonts[MAX_FONTS];

@@ -382,6 +382,9 @@ Ghoul2 Insert Start
 Ghoul2 Insert End
 */
 
+	// Reads a file from Jedi Outcast's game data only (fs_outcastpath), even where Jedi Academy has a
+	// file of the same name. -1 if not there. Free with FS_FreeFile.
+	long	(*FS_ReadOutcastFile)( const char *name, void **buf );
 
 } game_import_t;
 

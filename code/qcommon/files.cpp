@@ -242,6 +242,9 @@ static cvar_t          *fs_apppath;
 static cvar_t		*fs_basepath;
 static cvar_t		*fs_basegame;
 static cvar_t		*fs_cdpath;
+#ifndef JK2_MODE
+static cvar_t		*fs_outcastpath;	// Jedi Outcast's GameData folder, searched beneath everything else
+#endif
 static cvar_t		*fs_copyfiles;
 static cvar_t		*fs_gamedirvar;
 static cvar_t		*fs_dirbeforepak; //rww - when building search path, keep directories at top and insert pk3's under them
@@ -1816,6 +1819,67 @@ void FS_FreeFile( void *buffer ) {
 	Z_Free( buffer );
 }
 
+#ifndef JK2_MODE
+// True if the OS path lies inside Jedi Outcast's GameData folder (fs_outcastpath), whichever way its
+// separators are written.
+static qboolean FS_IsInsideOutcastPath( const char *osPath ) {
+	const char *outcastPath = fs_outcastpath->string;
+	int i;
+
+	for ( i = 0; outcastPath[i]; i++ ) {
+		const char a = ( outcastPath[i] == '\\' ) ? '/' : (char)tolower( (unsigned char)outcastPath[i] );
+		const char b = ( osPath[i] == '\\' ) ? '/' : (char)tolower( (unsigned char)osPath[i] );
+		if ( a != b ) {
+			return qfalse;
+		}
+	}
+	return ( osPath[i] == '\0' || osPath[i] == '/' || osPath[i] == '\\' ) ? qtrue : qfalse;
+}
+#endif
+
+/*
+=============
+FS_ReadOutcastFile
+
+Reads a file from Jedi Outcast's game data only, even where Jedi Academy's data has a file of the same
+name that hides it from FS_ReadFile (Jedi Outcast's skeleton and its animation list, for example).
+The search runs over copies of only Jedi Outcast's search path entries.
+=============
+*/
+long FS_ReadOutcastFile( const char *qpath, void **buffer ) {
+	*buffer = NULL;
+#ifdef JK2_MODE
+	return -1;
+#else
+	FS_AssertInitialised();
+
+	if ( !fs_outcastpath || !fs_outcastpath->string[0] ) {
+		return -1;
+	}
+
+	searchpath_t outcastPaths[64];
+	int numOutcastPaths = 0;
+	for ( searchpath_t *search = fs_searchpaths; search && numOutcastPaths < (int)ARRAY_LEN( outcastPaths ); search = search->next ) {
+		const char *osPath = search->pack ? search->pack->pakPathname : search->dir->fullpath;
+		if ( FS_IsInsideOutcastPath( osPath ) ) {
+			outcastPaths[numOutcastPaths++] = *search;
+		}
+	}
+	if ( !numOutcastPaths ) {
+		return -1;
+	}
+	for ( int i = 0; i < numOutcastPaths; i++ ) {
+		outcastPaths[i].next = ( i + 1 < numOutcastPaths ) ? &outcastPaths[i + 1] : NULL;
+	}
+
+	searchpath_t *allPaths = fs_searchpaths;
+	fs_searchpaths = &outcastPaths[0];
+	const long length = FS_ReadFile( qpath, buffer );
+	fs_searchpaths = allPaths;
+	return length;
+#endif
+}
+
 /*
 ============
 FS_WriteFile
@@ -2895,6 +2959,15 @@ void FS_Startup( const char *gameName ) {
 	fs_dirbeforepak = Cvar_Get("fs_dirbeforepak", "0", CVAR_INIT|CVAR_PROTECTED);
 
 	// add search path elements in reverse priority order
+#ifndef JK2_MODE
+	// Jedi Outcast's campaign on this engine: its levels, scripts and anything else Jedi Academy
+	// lacks come from Jedi Outcast's game data, and Jedi Academy's own files win on any clash (its
+	// menus, its remade characters). The game code reads this cvar to know which campaign is played.
+	fs_outcastpath = Cvar_Get( "fs_outcastpath", "", CVAR_INIT|CVAR_PROTECTED );
+	if ( fs_outcastpath->string[0] ) {
+		FS_AddGameDirectory( fs_outcastpath->string, gameName );
+	}
+#endif
 	if (fs_cdpath->string[0]) {
 		FS_AddGameDirectory( fs_cdpath->string, gameName );
 	}

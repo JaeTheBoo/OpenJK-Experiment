@@ -100,7 +100,7 @@ public:
 		ojk::SavedGameHelper& saved_game) const
 	{
 		saved_game.write<int8_t>(filename);
-		saved_game.write<>(animations);
+		saved_game.write<>(animations, MAX_ACADEMY_ANIMATIONS);	// Jedi Academy's, as saves always held
 		saved_game.write<>(torsoAnimEvents);
 		saved_game.write<>(legsAnimEvents);
 		saved_game.write<uint8_t>(torsoAnimEventCount);
@@ -112,7 +112,15 @@ public:
 		ojk::SavedGameHelper& saved_game)
 	{
 		saved_game.read<int8_t>(filename);
-		saved_game.read<>(animations);
+		saved_game.read<>(animations, MAX_ACADEMY_ANIMATIONS);
+		for (int anim = MAX_ACADEMY_ANIMATIONS; anim < MAX_ANIMATIONS; anim++)
+		{//Jedi Outcast's are not saved: G_Outcast_AddAnimationsAfterLoad fills them in again
+			animations[anim].firstFrame = 0;
+			animations[anim].numFrames = 0;
+			animations[anim].loopFrames = -1;
+			animations[anim].frameLerp = 100;
+			animations[anim].glaIndex = 0;
+		}
 		saved_game.read<>(torsoAnimEvents);
 		saved_game.read<>(legsAnimEvents);
 		saved_game.read<uint8_t>(torsoAnimEventCount);

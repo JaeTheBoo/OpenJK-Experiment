@@ -27,6 +27,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "wp_saber.h"
 #include "g_vehicles.h"
 #include "../cgame/cg_local.h"
+#include "g_outcast.h"
 #if !defined(RUFL_HSTRING_INC)
 	#include "../Rufl/hstring.h"
 #endif
@@ -1014,7 +1015,10 @@ qboolean G_ParseAnimationFile(int glaIndex, const char *skeletonName, int fileIn
 	}
 	COM_EndParseSession();
 
-
+	if ( glaIndex == 0 && !Q_stricmp( skeletonName, "_humanoid" ) )
+	{//Jedi Outcast's campaign: the animations Jedi Academy dropped (see g_outcast.h)
+		G_Outcast_AddAnimations( animations );
+	}
 
 
 #ifdef CONVENIENT_ANIMATION_FILE_DEBUG_THING

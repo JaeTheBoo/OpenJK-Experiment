@@ -25,6 +25,10 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 //   * Jedi Academy  - the engine continues starting up as normal and you create your own character.
 //   * Jedi Outcast  - the separate Jedi Outcast engine (openjo_sp) is started with the Jedi Outcast
 //                     game data, where you play as Kyle Katarn, and this program exits.
+//   * Jedi Outcast on the Academy engine
+//                   - this engine continues starting up with Jedi Outcast's game data mounted beneath
+//                     Jedi Academy's (fs_outcastpath), and plays Jedi Outcast's campaign as Kyle on
+//                     Jedi Academy's game code. Its saves and settings live in an "outcast" folder.
 //   * Quit          - this program exits without starting anything.
 //
 // The install locations of both games are read from "campaigns.ini" next to the executable. A
@@ -33,6 +37,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // The dialog can be skipped with a launch argument, for shortcuts and automated testing:
 //   --campaign=academy    start Jedi Academy directly
 //   --campaign=outcast    start Jedi Outcast directly
+//   --campaign=outcast-ja start Jedi Outcast on the Academy engine directly
 //
 // Only the Jedi Academy single player engine uses this. The Jedi Outcast engine, the multiplayer
 // engine and the dedicated server are unaffected.
@@ -51,7 +56,8 @@ Shows the campaign chooser (unless a --campaign argument was given) and acts on 
 programDirectory           Folder that contains this executable.
 argc, argv                 The program's command line, exactly as passed to main.
 extraCommandLine           Receives engine commands to append to the command line when Jedi
-                           Academy was chosen (for example "+set fs_basepath ..."). May be empty.
+                           Academy (or Jedi Outcast on its engine) was chosen, for example
+                           "+set fs_basepath ...". May be empty.
 extraCommandLineSize       Size of the extraCommandLine buffer in bytes.
 
 Returns true when the Jedi Academy engine should continue starting up, or false when the

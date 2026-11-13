@@ -29,6 +29,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "fields.h"
 #include "objectives.h"
 #include "../cgame/cg_camera.h"
+#include "g_outcast.h"
 #include "../qcommon/sstring.h"
 #include "qcommon/ojk_saved_game_helper.h"
 
@@ -879,6 +880,8 @@ static void ReadLevelLocals ()
 	*temp = level;	// struct copy
 	EvaluateFields(savefields_LevelLocals, temp, (byte *)&level, INT_ID('L','V','L','C'));
 	level = *temp;					// struct copy
+
+	G_Outcast_AddAnimationsAfterLoad();	// Jedi Outcast's animations are not in saved games
 
 	level.clients = pClients;				// restore clients
 	gi.Free(temp);

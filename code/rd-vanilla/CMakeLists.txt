@@ -113,6 +113,7 @@ if(BuildSPRdVanilla OR BuildJK2SPRdVanilla)
 		"${SPDir}/rd-vanilla/tr_marks.cpp"
 		"${SPDir}/rd-vanilla/tr_mesh.cpp"
 		"${SPDir}/rd-vanilla/tr_model.cpp"
+		"${SPDir}/rd-vanilla/tr_outcast_skeleton.cpp"
 		"${SPDir}/rd-vanilla/tr_quicksprite.cpp"
 		"${SPDir}/rd-vanilla/tr_quicksprite.h"
 		"${SPDir}/rd-vanilla/tr_scene.cpp"

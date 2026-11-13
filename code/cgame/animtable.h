@@ -1809,6 +1809,322 @@ stringID_table_t animTable [MAX_ANIMATIONS+1] =
 	ENUM2STRING(BOTH_CIN_49),		//# Level specific cinematic
 	ENUM2STRING(BOTH_CIN_50),		//# Level specific cinematic
 
+	// Jedi Outcast's animations that Jedi Academy dropped, for Jedi Outcast's campaign. Their frames
+	// come from Jedi Outcast's skeleton, appended to Jedi Academy's (tr_outcast_skeleton.cpp), and
+	// their entries from Jedi Outcast's animation.cfg (G_Outcast_AddAnimations).
+	ENUM2STRING(BOTH_DEADFLOP3),		//# React to being shot from Third Death finished pose
+	ENUM2STRING(BOTH_DEADFLOP4),		//# React to being shot from Fourth Death finished pose
+	ENUM2STRING(BOTH_DEADFLOP5),		//# React to being shot from Fifth Death finished pose
+	ENUM2STRING(BOTH_DEADFORWARD1_FLOP),		//# React to being shot First thrown forward death finished pose
+	ENUM2STRING(BOTH_DEADFORWARD2_FLOP),		//# React to being shot Second thrown forward death finished pose
+	ENUM2STRING(BOTH_DEADBACKWARD1_FLOP),		//# React to being shot First thrown backward death finished pose
+	ENUM2STRING(BOTH_DEADBACKWARD2_FLOP),		//# React to being shot Second thrown backward death finished pose
+	ENUM2STRING(BOTH_LYINGDEAD1_FLOP),		//# React to being shot Killed lying down death finished pose
+	ENUM2STRING(BOTH_STUMBLEDEAD1_FLOP),		//# React to being shot Stumble forward death finished pose
+	ENUM2STRING(BOTH_FALLDEAD1_FLOP),		//# React to being shot Fall forward and splat death finished pose
+	ENUM2STRING(BOTH_PAIN19),		//#
+	ENUM2STRING(BOTH_PAIN20),		//# GETTING SHOCKED
+	ENUM2STRING(BOTH_ATTACK2IDLE1),		//# Idle with one-handed pistol
+	ENUM2STRING(BOTH_ATTACK8),		//# Attack with ???
+	ENUM2STRING(BOTH_ATTACK9),		//# Attack with rocket launcher
+	ENUM2STRING(BOTH_ATTACK12),		//# Attack with detpack
+	ENUM2STRING(BOTH_MELEE3),		//# Third melee attack
+	ENUM2STRING(BOTH_MELEE4),		//# Fourth melee attack
+	ENUM2STRING(BOTH_MELEE5),		//# Fifth melee attack
+	ENUM2STRING(BOTH_MELEE6),		//# Sixth melee attack
+	ENUM2STRING(BOTH_STAND4IDLE1),		//# Random standing idle
+	ENUM2STRING(BOTH_STAND7),		//# both hands on hips (female)
+	ENUM2STRING(BOTH_STAND1TO3),		//# Transition from stand1 to stand3
+	ENUM2STRING(BOTH_STAND3TO1),		//# Transition from stand3 to stand1
+	ENUM2STRING(BOTH_STANDTOWALK1),		//# Transition from stand1 to walk1
+	ENUM2STRING(BOTH_STANDUP1),		//# standing up and stumbling
+	ENUM2STRING(BOTH_STAND1_REELO),		//# Reelo in his stand1 position (cin #18)
+	ENUM2STRING(BOTH_STAND5_REELO),		//# Reelo in his stand5 position (cin #18)
+	ENUM2STRING(BOTH_ALERT1),		//# Startled by something while on guard
+	ENUM2STRING(BOTH_GESTURE3),		//# Generic gesture, non-specific
+	ENUM2STRING(BOTH_TALKGESTURE2),		//# Generic talk anim
+	ENUM2STRING(BOTH_TALKGESTURE3),		//# Generic talk anim
+	ENUM2STRING(BOTH_TALKGESTURE4START),		//# Beginning talk anim 4
+	ENUM2STRING(BOTH_TALKGESTURE4),		//# Talk gesture 4
+	ENUM2STRING(BOTH_TALKGESTURE4STOP),		//# Ending talk anim 4
+	ENUM2STRING(BOTH_TALKGESTURE5START),		//# Start hand on chin
+	ENUM2STRING(BOTH_TALKGESTURE5),		//# Hand on chin
+	ENUM2STRING(BOTH_TALKGESTURE5STOP),		//# Stop hand on chin
+	ENUM2STRING(BOTH_TALKGESTURE6START),		//# Starting Motions to self
+	ENUM2STRING(BOTH_TALKGESTURE6),		//# Pointing at self
+	ENUM2STRING(BOTH_TALKGESTURE6STOP),		//# Ending Motions to self
+	ENUM2STRING(BOTH_TALKGESTURE7START),		//# Start touches Kyle on shoulder
+	ENUM2STRING(BOTH_TALKGESTURE7),		//# Hold touches Kyle on shoulder
+	ENUM2STRING(BOTH_TALKGESTURE7STOP),		//# Ending touches Kyle on shoulder
+	ENUM2STRING(BOTH_TALKGESTURE8START),		//# Lando's chin hold
+	ENUM2STRING(BOTH_TALKGESTURE8),		//# Lando's chin hold
+	ENUM2STRING(BOTH_TALKGESTURE8STOP),		//# Lando's chin hold
+	ENUM2STRING(BOTH_TALKGESTURE9),		//# Same as gesture 2 but with the right hand
+	ENUM2STRING(BOTH_TALKGESTURE10),		//# Shoulder shrug
+	ENUM2STRING(BOTH_TALKGESTURE11START),		//# Arms folded across chest
+	ENUM2STRING(BOTH_TALKGESTURE11STOP),		//# Arms folded across chest
+	ENUM2STRING(BOTH_TALKGESTURE12),		//# Tavion taunting Kyle
+	ENUM2STRING(BOTH_TALKGESTURE13START),		//# Luke warning Kyle
+	ENUM2STRING(BOTH_TALKGESTURE13),		//# Luke warning Kyle
+	ENUM2STRING(BOTH_TALKGESTURE13STOP),		//# Luke warning Kyle
+	ENUM2STRING(BOTH_TALKGESTURE14),		//# Luke gesturing to Kyle
+	ENUM2STRING(BOTH_TALKGESTURE15START),		//# Desann taunting Kyle
+	ENUM2STRING(BOTH_TALKGESTURE15),		//# Desann taunting Kyle
+	ENUM2STRING(BOTH_TALKGESTURE15STOP),		//# Desann taunting Kyle
+	ENUM2STRING(BOTH_TALKGESTURE16),		//# Bartender gesture cin #15
+	ENUM2STRING(BOTH_TALKGESTURE17),		//# Bartender gesture cin #15
+	ENUM2STRING(BOTH_TALKGESTURE18),		//# Bartender gesture cin #15
+	ENUM2STRING(BOTH_TALKGESTURE19START),		//# Desann lifting his arm "Join me" (cin #34)
+	ENUM2STRING(BOTH_TALKGESTURE19STOP),		//# Desann lifting his arm "Join me" (cin #34)
+	ENUM2STRING(BOTH_TALKGESTURE20START),		//# Kyle lifting his arm "Join us" (cin #34)
+	ENUM2STRING(BOTH_TALKGESTURE21),		//# generic talk gesture from stand3
+	ENUM2STRING(BOTH_TALKGESTURE22),		//# generic talk gesture from stand3
+	ENUM2STRING(BOTH_TALKGESTURE23),		//# generic talk gesture from stand3
+	ENUM2STRING(BOTH_PAUSE1START),		//# Luke pauses to warn Kyle (cin #24) start
+	ENUM2STRING(BOTH_PAUSE1STOP),		//# Luke pauses to warn Kyle (cin #24) stop
+	ENUM2STRING(BOTH_HEADSHAKE1_REELO),		//# Head shake NO for Reelo
+	ENUM2STRING(BOTH_SITHEADTILTLSTART),		//# Head tilt to left from seated position
+	ENUM2STRING(BOTH_SITHEADTILTLSTOP),		//# Head tilt to left from seated position
+	ENUM2STRING(BOTH_SITHEADTILTRSTART),		//# Head tilt to right from seated position
+	ENUM2STRING(BOTH_SITHEADTILTRSTOP),		//# Head tilt to right from seated position
+	ENUM2STRING(BOTH_SITHEADNOD),		//# Head shake YES from seated position
+	ENUM2STRING(BOTH_SITHEADSHAKE),		//# Head shake NO from seated position
+	ENUM2STRING(BOTH_EXAMINE1START),		//# Start Mon Mothma examining crystal
+	ENUM2STRING(BOTH_EXAMINE1),		//# Mon Mothma examining crystal
+	ENUM2STRING(BOTH_EXAMINE1STOP),		//# Stop Mon Mothma examining crystal
+	ENUM2STRING(BOTH_EXAMINE2START),		//# Start Kyle tossing crystal
+	ENUM2STRING(BOTH_EXAMINE2),		//# Hold Kyle tossing crystal
+	ENUM2STRING(BOTH_EXAMINE2STOP),		//# End Kyle tossing crystal
+	ENUM2STRING(BOTH_EXAMINE3START),		//# Start Lando looking around corner
+	ENUM2STRING(BOTH_EXAMINE3),		//# Hold Lando looking around corner
+	ENUM2STRING(BOTH_EXAMINE3STOP),		//# End Lando looking around corner
+	ENUM2STRING(BOTH_LEANLEFT2START),		//# Start leaning left in chair
+	ENUM2STRING(BOTH_LEANLEFT2STOP),		//# Stop leaning left in chair
+	ENUM2STRING(BOTH_LEANRIGHT3START),		//# Start Lando leaning on wall
+	ENUM2STRING(BOTH_LEANRIGHT3),		//# Lando leaning on wall
+	ENUM2STRING(BOTH_LEANRIGHT3STOP),		//# Stop Lando leaning on wall
+	ENUM2STRING(BOTH_FORCEFOUNTAIN1_START),		//# Kyle being lifted into the Force Fountain (cin #10)
+	ENUM2STRING(BOTH_FORCEFOUNTAIN1_MIDDLE),		//# Kyle changing to looping position in the Force Fountain (cin #10)
+	ENUM2STRING(BOTH_FORCEFOUNTAIN1_LOOP),		//# Kyle being spun in the Force Fountain (cin #10)
+	ENUM2STRING(BOTH_FORCEFOUNTAIN1_STOP),		//# Kyle being set down out of the Force Fountain (cin #10)
+	ENUM2STRING(BOTH_THUMBING1),		//# Lando gesturing with thumb over his shoulder (cin #19)
+	ENUM2STRING(BOTH_PUNCHER1),		//# Jan punching Kyle in the shoulder (cin #37)
+	ENUM2STRING(BOTH_CONSTRAINER1HOLD),		//# Static pose of starting Tavion constraining Jan (cin #9)
+	ENUM2STRING(BOTH_CONSTRAINEE1HOLD),		//# Static pose of starting Jan being constrained by Tavion (cin #9)
+	ENUM2STRING(BOTH_CONSTRAINER1STAND),		//# Tavion constraining Jan in a stand pose (cin #9)
+	ENUM2STRING(BOTH_CONSTRAINEE1STAND),		//# Jan being constrained in a stand pose (cin #9)
+	ENUM2STRING(BOTH_CONSTRAINER1WALK),		//# Tavion shoving jan forward (cin #9)
+	ENUM2STRING(BOTH_CONSTRAINEE1WALK),		//# Jan being shoved forward by Tavion (cin #9)
+	ENUM2STRING(BOTH_CONSTRAINER1LOOP),		//# Tavion walking with Jan in a loop (cin #9)
+	ENUM2STRING(BOTH_CONSTRAINEE1LOOP),		//# Jan walking with Tavion in a loop (cin #9)
+	ENUM2STRING(BOTH_HANDSHAKER1START),		//# Luke shaking Kyle's hand (cin #37)
+	ENUM2STRING(BOTH_HANDSHAKER1LOOP),		//# Luke shaking Kyle's hand (cin #37)
+	ENUM2STRING(BOTH_HANDSHAKEE1START),		//# Kyle shaking Luke's hand (cin #37)
+	ENUM2STRING(BOTH_HANDSHAKEE1LOOP),		//# Kyle shaking Luke's hand (cin #37)
+	ENUM2STRING(BOTH_LAUGH1START),		//# Reelo leaning forward before laughing (cin #18)
+	ENUM2STRING(BOTH_LAUGH1STOP),		//# Reelo laughing (cin #18)
+	ENUM2STRING(BOTH_ESCAPEPOD_LEAVE1),		//# Kyle leaving escape pod (cin #33)
+	ENUM2STRING(BOTH_ESCAPEPOD_LEAVE2),		//# Jan leaving escape pod (cin #33)
+	ENUM2STRING(BOTH_HUGGERSTOP2),		//# Kyle let go of Jan and step back (cin #29)
+	ENUM2STRING(BOTH_HUGGEESTOP2),		//# Jan released from hug (cin #29)
+	ENUM2STRING(BOTH_KISSER1),		//# Temp until the Kiss anim gets split up
+	ENUM2STRING(BOTH_KISSER1START1),		//# Kyle start kissing Jan
+	ENUM2STRING(BOTH_KISSER1START2),		//# Kyle start kissing Jan
+	ENUM2STRING(BOTH_KISSER1LOOP),		//# Kyle loop kissing Jan
+	ENUM2STRING(BOTH_KISSER1STOP),		//# Temp until the Kiss anim gets split up
+	ENUM2STRING(BOTH_KISSER1STOP1),		//# Kyle stop kissing but don't let go
+	ENUM2STRING(BOTH_KISSER1STOP2),		//# Kyle step back from Jan
+	ENUM2STRING(BOTH_KISSEE1),		//# Temp until the Kiss anim gets split up
+	ENUM2STRING(BOTH_KISSEE1START1),		//# Jan start being kissed
+	ENUM2STRING(BOTH_KISSEE1START2),		//# Jan start being kissed
+	ENUM2STRING(BOTH_KISSEE1LOOP),		//# Jan loop being kissed
+	ENUM2STRING(BOTH_KISSEE1STOP),		//# Temp until the Kiss anim gets split up
+	ENUM2STRING(BOTH_KISSEE1STOP1),		//# Jan stop being kissed but don't let go
+	ENUM2STRING(BOTH_KISSEE1STOP2),		//# Jan wait for Kyle to step back
+	ENUM2STRING(BOTH_BARTENDER_IDLE1),		//# Bartender idle in cin #15
+	ENUM2STRING(BOTH_BARTENDER_THROW1),		//# Bartender throws glass in cin #15
+	ENUM2STRING(BOTH_BARTENDER_COWERSTART),		//# Start of Bartender raising both hands up in surrender (cin #16)
+	ENUM2STRING(BOTH_BARTENDER_COWERLOOP),		//# Loop of Bartender waving both hands in surrender (cin #16)
+	ENUM2STRING(BOTH_BARTENDER_COWER),		//# Single frame of Bartender waving both hands in surrender (cin #16)
+	ENUM2STRING(BOTH_THREATEN1_START),		//# First frame of Kyle threatening Bartender with lightsaber (cin #16)
+	ENUM2STRING(BOTH_THREATEN1),		//# Kyle threatening Bartender with lightsaber (cin #16)
+	ENUM2STRING(BOTH_RADIO_ONOFF),		//# Mech Galak turning on his suit radio (cin #32)
+	ENUM2STRING(BOTH_TRIUMPHANT1START),		//# Mech Galak raising his arms in victory (cin #32)
+	ENUM2STRING(BOTH_TRIUMPHANT1STARTGESTURE),		//# Mech Galak raising his arms in victory (cin #32)
+	ENUM2STRING(BOTH_TRIUMPHANT1STOP),		//# Mech Galak lowering his arms in victory (cin #32)
+	ENUM2STRING(BOTH_COVERUP1_LOOP),		//# animation of getting in line of friendly fire
+	ENUM2STRING(BOTH_COVERUP1_START),		//# transitions from stand to coverup1_loop
+	ENUM2STRING(BOTH_COVERUP1_END),		//# transitions from coverup1_loop to stand
+	ENUM2STRING(BOTH_INJURED4),		//# Injured pose 4
+	ENUM2STRING(BOTH_INJURED4TO5),		//# Transition from INJURED4 to INJURED5
+	ENUM2STRING(BOTH_INJURED5),		//# Injured pose 5
+	ENUM2STRING(BOTH_SIT1STAND),		//# Stand up from First sitting anim
+	ENUM2STRING(BOTH_SIT2TO3),		//# Trans from sit2 to sit3?
+	ENUM2STRING(BOTH_SIT3TO1),		//# Trans from sit3 to sit1?
+	ENUM2STRING(BOTH_SIT3TO2),		//# Trans from sit3 to sit2?
+	ENUM2STRING(BOTH_SIT4TO5),		//# Trans from sit4 to sit5
+	ENUM2STRING(BOTH_SIT4TO6),		//# Trans from sit4 to sit6
+	ENUM2STRING(BOTH_SIT5TO4),		//# Trans from sit5 to sit4
+	ENUM2STRING(BOTH_SIT5TO6),		//# Trans from sit5 to sit6
+	ENUM2STRING(BOTH_SIT6TO4),		//# Trans from sit6 to sit4
+	ENUM2STRING(BOTH_SIT6TO5),		//# Trans from sit6 to sit5
+	ENUM2STRING(BOTH_SIT7TOSTAND1),		//# getting up from sit7 into stand1
+	ENUM2STRING(BOTH_CROUCH2IDLE),		//# crouch and resting on back righ heel, no weapon
+	ENUM2STRING(BOTH_GET_UP1),		//# Get up from the ground, face down
+	ENUM2STRING(BOTH_GET_UP2),		//# Get up from the ground, face up
+	ENUM2STRING(BOTH_COCKPIT_SIT),		//# sit in a cockpit.
+	ENUM2STRING(BOTH_RUMMAGE1START),		//# Kyle rummaging for crystal (cin 2)
+	ENUM2STRING(BOTH_RUMMAGE1),		//# Kyle rummaging for crystal (cin 2)
+	ENUM2STRING(BOTH_RUMMAGE1STOP),		//# Kyle rummaging for crystal (cin 2)
+	ENUM2STRING(BOTH_HOLDGLASS1),		//# Bartender holds glass (cin# 14)
+	ENUM2STRING(BOTH_SLIDEGLASS1),		//# Bartender slides glass (cin# 14)
+	ENUM2STRING(BOTH_SLAMSABERDOWN),		//# Kyle slamming his saber on the bar top (cin# 14)
+	ENUM2STRING(BOTH_WALK3),		//# Goes with stand3
+	ENUM2STRING(BOTH_WALK4),		//# Walk cycle goes to a stand4
+	ENUM2STRING(BOTH_WALK8),		//# Normal walk with hands behind back (Luke in cin#12)
+	ENUM2STRING(BOTH_WALK9),		//# Lando walk (cin #17)
+	ENUM2STRING(BOTH_WALK10),		//# Lando walk (cin #17)
+	ENUM2STRING(BOTH_WALKTORUN1),		//# transition from walk to run
+	ENUM2STRING(BOTH_RUNINJURED1),		//# Run with injured left leg
+	ENUM2STRING(BOTH_RUNAWAY1),		//# Running scared
+	ENUM2STRING(BOTH_SWIM1),		//# Swimming
+	ENUM2STRING(BOTH_ROLL_FR),		//# Roll forward right
+	ENUM2STRING(BOTH_ROLL_FL),		//# Roll forward left
+	ENUM2STRING(BOTH_ROLL_BR),		//# Roll back right
+	ENUM2STRING(BOTH_ROLL_BL),		//# Roll back left
+	ENUM2STRING(BOTH_DIVE1),		//# Dive!
+	ENUM2STRING(BOTH_WALL_FLIP_FWD),		//#
+	ENUM2STRING(BOTH_DEATHFROMBACKSLASH),		//#
+	ENUM2STRING(BOTH_ONLADDER_BOT1),		//# Getting on the ladder at the bottom
+	ENUM2STRING(BOTH_OFFLADDER_BOT1),		//# Getting off the ladder at the bottom
+	ENUM2STRING(BOTH_ONLADDER_TOP1),		//# Getting on the ladder at the top
+	ENUM2STRING(BOTH_OFFLADDER_TOP1),		//# Getting off the ladder at the top
+	ENUM2STRING(BOTH_LIFT1),		//# Lifting someone/thing over their shoulder
+	ENUM2STRING(BOTH_STEP1),		//# telsia checking out lake cinematic9.2
+	ENUM2STRING(BOTH_HITWALL1),		//# cin.18, Kenn hit by borg into wall 56 units away
+	ENUM2STRING(BOTH_AMBUSHLAND1),		//# landing from fall on victim
+	ENUM2STRING(BOTH_BIRTH1),		//# birth from jumping through walls
+	ENUM2STRING(BOTH_FLY_IDLE1),		//# Flying Idle 1
+	ENUM2STRING(BOTH_FLY_IDLE2),		//# Flying Idle 2
+	ENUM2STRING(BOTH_FLY_START1),		//# Start flying
+	ENUM2STRING(BOTH_FLY_STOP1),		//# Stop flying
+	ENUM2STRING(BOTH_FLY_LOOP1),		//# Normal flying, should loop
+	ENUM2STRING(BOTH_FLOAT1),		//# Crew floating through space 1
+	ENUM2STRING(BOTH_FLOAT2),		//# Crew floating through space 2
+	ENUM2STRING(BOTH_FLOATCONSOLE1),		//# Crew floating and working on console
+	ENUM2STRING(BOTH_LIE_DOWN1),		//# From a stand position, get down on ground, face down
+	ENUM2STRING(BOTH_LIE_DOWN2),		//# From a stand position, get down on ground, face up
+	ENUM2STRING(BOTH_LIE_DOWN3),		//# reaction to local disnode being destroyed
+	ENUM2STRING(BOTH_PAIN2WRITHE1),		//# Transition from upright position to writhing on ground anim
+	ENUM2STRING(BOTH_PRONE2RLEG),		//# Lying on ground reach to grab right leg
+	ENUM2STRING(BOTH_PRONE2LLEG),		//# Lying on ground reach to grab left leg
+	ENUM2STRING(BOTH_WRITHING1),		//# Lying on ground on back writhing in pain
+	ENUM2STRING(BOTH_WRITHING1RLEG),		//# Lying on ground writhing in pain, holding right leg
+	ENUM2STRING(BOTH_WRITHING1LLEG),		//# Lying on ground writhing in pain, holding left leg
+	ENUM2STRING(BOTH_WRITHING2),		//# Lying on ground on front writhing in pain
+	ENUM2STRING(BOTH_INJURED1),		//# Lying down, against wall - can also be sleeping against wall
+	ENUM2STRING(BOTH_INJURED2),		//# Injured pose 2
+	ENUM2STRING(BOTH_INJURED3),		//# Injured pose 3
+	ENUM2STRING(BOTH_INJURED6),		//# Injured pose 6
+	ENUM2STRING(BOTH_INJURED6ATTACKSTART),		//# Start attack while in injured 6 pose
+	ENUM2STRING(BOTH_INJURED6ATTACKSTOP),		//# End attack while in injured 6 pose
+	ENUM2STRING(BOTH_INJURED6COMBADGE),		//# Hit combadge while in injured 6 pose
+	ENUM2STRING(BOTH_INJURED6POINT),		//# Chang points to door while in injured state
+	ENUM2STRING(BOTH_INJUREDTOSTAND1),		//# Runinjured to stand1
+	ENUM2STRING(BOTH_PROPUP1),		//# Kyle getting up from having been knocked down (cin #9 end)
+	ENUM2STRING(BOTH_CRAWLBACK1),		//# Lying on back, crawling backwards with elbows
+	ENUM2STRING(BOTH_SITWALL1),		//# Sitting against a wall
+	ENUM2STRING(BOTH_SLEEP2),		//# on floor-back against wall-arms crossed
+	ENUM2STRING(BOTH_SLEEP3),		//# Sleeping in a chair
+	ENUM2STRING(BOTH_SLEEP4),		//# Sleeping slumped over table
+	ENUM2STRING(BOTH_SLEEP5),		//# Laying on side sleeping on flat sufrace
+	ENUM2STRING(BOTH_SLEEP2GETUP),		//# alarmed and getting up out of sleep2 pose to stand
+	ENUM2STRING(BOTH_SLEEP3GETUP),		//# alarmed and getting up out of sleep3 pose to stand
+	ENUM2STRING(BOTH_SLEEP3DEATH),		//# death in chair, from sleep3 idle
+	ENUM2STRING(BOTH_SLEEP3DEAD),		//# death in chair, from sleep3 idle
+	ENUM2STRING(BOTH_SLEEP_IDLE1),		//# rub face and nose while asleep from sleep pose 1
+	ENUM2STRING(BOTH_SLEEP_IDLE2),		//# shift position while asleep - stays in sleep2
+	ENUM2STRING(BOTH_SLEEP_IDLE3),		//# Idle anim from sleep pose 3
+	ENUM2STRING(BOTH_SLEEP_IDLE4),		//# Idle anim from sleep pose 4
+	ENUM2STRING(BOTH_SLEEP1_NOSE),		//# Scratch nose from SLEEP1 pose
+	ENUM2STRING(BOTH_SLEEP2_SHIFT),		//# Shift in sleep from SLEEP2 pose
+	ENUM2STRING(BOTH_RESTRAINED1),		//# Telsia tied to medical table
+	ENUM2STRING(BOTH_RESTRAINED1POINT),		//# Telsia tied to medical table pointing at Munro
+	ENUM2STRING(BOTH_LIFTED1),		//# Fits with BOTH_LIFT1, lifted on shoulder
+	ENUM2STRING(BOTH_CARRIED1),		//# Fits with TORSO_CARRY1, carried over shoulder
+	ENUM2STRING(BOTH_CARRIED2),		//# Laying over object
+	ENUM2STRING(BOTH_COCKPIT_TALKR1START),		//# turn head from straight forward to looking full right
+	ENUM2STRING(BOTH_COCKPIT_TALKR1STARTTOMID),		//# from TALKR1START to looking at hologram (cin #1)
+	ENUM2STRING(BOTH_COCKPIT_TALKR1MIDTOSTART),		//# from looking at hologram to TALKR1START (cin #1)
+	ENUM2STRING(BOTH_COCKPIT_TALKR1STOP),		//# return head to straight forward from BOTH_COCKPIT_TALKR1
+	ENUM2STRING(BOTH_COCKPIT_TALKR1STOPTOMID),		//# from TALKR1STOP to TALKR1MID
+	ENUM2STRING(BOTH_COCKPIT_TALKR1MIDTOSTOP),		//# from looking at hologram to TALKR1STOP (cin #1)
+	ENUM2STRING(BOTH_COCKPIT_TALKR1),		//# talk to right side
+	ENUM2STRING(BOTH_COCKPIT_TALKL1START),		//# turn head from straight forward to looking full left
+	ENUM2STRING(BOTH_COCKPIT_TALKL1STARTTOMID),		//# from TALKL1START to looking at hologram (cin #1)
+	ENUM2STRING(BOTH_COCKPIT_TALKL1MIDTOSTART),		//# from looking at hologram to TALKL1START (cin #1)
+	ENUM2STRING(BOTH_COCKPIT_TALKL1STOP),		//# return head to straight forward from BOTH_COCKPIT_TALKL1
+	ENUM2STRING(BOTH_COCKPIT_TALKL1STOPTOMID),		//# from TALKL1STOP to TALKL1MID
+	ENUM2STRING(BOTH_COCKPIT_TALKL1MIDTOSTOP),		//# from looking at hologram to TALKL1STOP (cin #1)
+	ENUM2STRING(BOTH_COCKPIT_TALKL1),		//# talk to left side
+	ENUM2STRING(BOTH_COCKPIT_CONSOLE1),		//# type at controls
+	ENUM2STRING(BOTH_COCKPIT_CONSOLE2),		//# type at controls
+	ENUM2STRING(BOTH_COCKPIT_CONSOLE2_PARTIAL),		//# last part of console2 anim (cin #1) used by Jan
+	ENUM2STRING(BOTH_COCKPIT_HEADNOD),		//# nod head yes while sitting
+	ENUM2STRING(BOTH_COCKPIT_HEADSHAKE),		//# shake head no while sitting
+	ENUM2STRING(BOTH_COCKPIT_HEADTILTLSTART),		//# start tilt head left while sitting
+	ENUM2STRING(BOTH_COCKPIT_HEADTILTLSTOP),		//# stop tilt head left while sitting
+	ENUM2STRING(BOTH_COCKPIT_HEADTILTRSTART),		//# start tilt head right while sitting
+	ENUM2STRING(BOTH_COCKPIT_HEADTILTRSTOP),		//# stop tilt head right while sitting
+	ENUM2STRING(BOTH_COCKPIT_TALKGESTURE7START),		//# Lando's supporting hand to Kyle (cin #21)
+	ENUM2STRING(BOTH_COCKPIT_TALKGESTURE7STOP),		//# Lando's supporting hand away from Kyle (cin #21)
+	ENUM2STRING(BOTH_COCKPIT_TALKGESTURE8START),		//# Hand to Lando's chin (cin #21)
+	ENUM2STRING(BOTH_COCKPIT_TALKGESTURE8STOP),		//# hand away from Lando's chin *cin #21)
+	ENUM2STRING(BOTH_COCKPIT_TALKGESTURE11START),		//#
+	ENUM2STRING(BOTH_COCKPIT_TALKGESTURE11STOP),		//#
+	ENUM2STRING(BOTH_COCKPIT_SLEEP6START),		//#
+	ENUM2STRING(BOTH_COCKPIT_SLEEP6STOP),		//#
+	ENUM2STRING(TORSO_DROPWEAP2),		//# Put weapon away
+	ENUM2STRING(TORSO_DROPWEAP3),		//# Put weapon away
+	ENUM2STRING(TORSO_RAISEWEAP2),		//# Draw Weapon
+	ENUM2STRING(TORSO_RAISEWEAP3),		//# Draw Weapon
+	ENUM2STRING(TORSO_WEAPONREADY5),		//# Ready to fire bowcaster
+	ENUM2STRING(TORSO_WEAPONREADY6),		//# Ready to fire ???
+	ENUM2STRING(TORSO_WEAPONREADY7),		//# Ready to fire ???
+	ENUM2STRING(TORSO_WEAPONREADY8),		//# Ready to fire ???
+	ENUM2STRING(TORSO_WEAPONREADY9),		//# Ready to fire rocket launcher
+	ENUM2STRING(TORSO_WEAPONREADY11),		//# Ready to fire laser trap
+	ENUM2STRING(TORSO_WEAPONREADY12),		//# Ready to fire detpack
+	ENUM2STRING(TORSO_WEAPONIDLE1),		//# Holding stun baton
+	ENUM2STRING(TORSO_WEAPONIDLE5),		//# Holding bowcaster
+	ENUM2STRING(TORSO_WEAPONIDLE6),		//# Holding ???
+	ENUM2STRING(TORSO_WEAPONIDLE7),		//# Holding ???
+	ENUM2STRING(TORSO_WEAPONIDLE8),		//# Holding ???
+	ENUM2STRING(TORSO_WEAPONIDLE9),		//# Holding rocket launcher
+	ENUM2STRING(TORSO_WEAPONIDLE11),		//# Holding laser trap
+	ENUM2STRING(TORSO_WEAPONIDLE12),		//# Holding detpack
+	ENUM2STRING(TORSO_HANDGESTURE1),		//# gestures to left one hand
+	ENUM2STRING(TORSO_HANDGESTURE2),		//# gestures to right one hand
+	ENUM2STRING(TORSO_HANDGESTURE3),		//# gestures to the left both hands
+	ENUM2STRING(TORSO_HANDGESTURE4),		//# gestures to the right both hands
+	ENUM2STRING(TORSO_HANDEXTEND1),		//# doctor reaching for hypospray in scav5
+	ENUM2STRING(TORSO_HANDRETRACT1),		//# doctor taking hypospray from player in scav5
+	ENUM2STRING(TORSO_DROPHELMET1),		//# Drop the helmet to the waist
+	ENUM2STRING(TORSO_RAISEHELMET1),		//# Bring the helmet to the head
+	ENUM2STRING(TORSO_REACHHELMET1),		//# reaching for helmet off of 60 tall cabinet
+	ENUM2STRING(TORSO_GRABLBACKL),		//# reach to lower back with left hand
+	ENUM2STRING(TORSO_GRABUBACKL),		//# reach to upper back with left hand
+	ENUM2STRING(TORSO_GRABLBACKR),		//# reach to lower back with right hand
+	ENUM2STRING(TORSO_GRABUBACKR),		//# reach to upper back with right hand
+	ENUM2STRING(LEGS_WALKBACK1),		//# Walk1 backwards
+	ENUM2STRING(LEGS_WALKBACK2),		//# Walk2 backwards
+	ENUM2STRING(LEGS_RUNBACK1),		//# Run1 backwards
+	ENUM2STRING(LEGS_RUNBACK2),		//# Run2 backwards
+	ENUM2STRING(LEGS_KNEELDOWN1),		//# Get down on one knee?
+	ENUM2STRING(LEGS_KNEELUP1),		//# Get up from one knee?
+	ENUM2STRING(LEGS_CRLEAN_LEFT1),		//# Crouch Lean left
+	ENUM2STRING(LEGS_CRLEAN_RIGHT1),		//# Crouch Lean Right
+
 	//must be terminated
 	{ NULL,-1 }
 };

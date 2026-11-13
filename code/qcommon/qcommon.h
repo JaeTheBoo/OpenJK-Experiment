@@ -517,6 +517,10 @@ void	FS_ForceFlush( fileHandle_t f );
 void	FS_FreeFile( void *buffer );
 // frees the memory returned by FS_ReadFile
 
+long	FS_ReadOutcastFile( const char *qpath, void **buffer );
+// like FS_ReadFile, but only from Jedi Outcast's game data (fs_outcastpath), even where a file of the
+// same name hides it; -1 when it is not there (always, without fs_outcastpath)
+
 void	FS_WriteFile( const char *qpath, const void *buffer, int size );
 // writes a complete file, creating any subdirectories needed
 

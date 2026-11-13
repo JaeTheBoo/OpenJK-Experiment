@@ -1849,6 +1849,10 @@ void		Create_Matrix(const float *angle, mdxaBone_t *matrix);
 void		Multiply_3x4Matrix(mdxaBone_t *out,const mdxaBone_t *in2,const mdxaBone_t *in);
 extern qboolean R_LoadMDXM (model_t *mod, void *buffer, const char *name, qboolean &bAlreadyCached );
 extern qboolean R_LoadMDXA (model_t *mod, void *buffer, const char *name, qboolean &bAlreadyCached );
+#ifndef JK2_MODE
+// tr_outcast_skeleton.cpp: Jedi Outcast's animations added to Jedi Academy's humanoid skeleton
+void *R_Outcast_AddAnimationsToSkeleton( const char *modelName, void *file, long fileLength );
+#endif
 /*
 Ghoul2 Insert End
 */
