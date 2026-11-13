@@ -38,6 +38,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 //   --campaign=academy    start Jedi Academy directly
 //   --campaign=outcast    start Jedi Outcast directly
 //   --campaign=outcast-ja start Jedi Academy with Jedi Outcast's story already chosen (g_campaign)
+//                         and its menus and HUD (ui_style)
 //
 // Only the Jedi Academy single player engine uses this. The Jedi Outcast engine, the multiplayer
 // engine and the dedicated server are unaffected.

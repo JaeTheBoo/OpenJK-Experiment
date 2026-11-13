@@ -36,7 +36,7 @@ The single player program opens a chooser to pick which game to play. It reads b
 | - | - |
 | `--campaign=academy` | Start Jedi Academy. Jedi Outcast's game data is mounted too when `campaigns.ini` knows where it is. |
 | `--campaign=outcast` | Start Jedi Outcast on its own engine. |
-| `--campaign=outcast-ja` | Start Jedi Academy with Jedi Outcast's story already chosen. |
+| `--campaign=outcast-ja` | Start Jedi Academy with Jedi Outcast's story already chosen, and with Jedi Outcast's menus and HUD (`ui_style outcast`, unless the command line sets `ui_style` itself). |
 
 ### Movement
 
@@ -81,7 +81,7 @@ Characters become physics ragdolls when they die. The muscle-driven behaviours a
 | - | - | - |
 | `fs_outcastpath` | (empty) | Jedi Outcast's `GameData` folder. Set by the launcher from `campaigns.ini`. With it, New Game offers Jedi Outcast's story. |
 | `g_campaign` | `academy` | Which story is being played: `academy` or `outcast`. Set by New Game and kept in saved games. |
-| `ui_style` | `academy` | Whose menus and HUD to use: `academy` or `outcast` (needs Jedi Outcast's game data). Also in Setup → Options as "Interface". New Game and loading a saved game switch it to that story's own. |
+| `ui_style` | `academy` | Whose menus and HUD to use: `academy` or `outcast` (needs Jedi Outcast's game data). Also in Setup → Options as "Interface". New Game and loading a saved game switch it to that story's own, and `--campaign=outcast-ja` starts with `outcast`. |
 
 ### Graphics
 

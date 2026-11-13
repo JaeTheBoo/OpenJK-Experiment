@@ -64,7 +64,7 @@ typedef enum
 	CAMPAIGN_NOT_CHOSEN,
 	CAMPAIGN_JEDI_ACADEMY,
 	CAMPAIGN_JEDI_OUTCAST,
-	CAMPAIGN_JEDI_OUTCAST_ON_ACADEMY,	// --campaign=outcast-ja: this engine, with Jedi Outcast's story already chosen
+	CAMPAIGN_JEDI_OUTCAST_ON_ACADEMY,	// --campaign=outcast-ja: this engine, with Jedi Outcast's story and interface already chosen
 	CAMPAIGN_QUIT
 } campaignChoice_t;
 
@@ -583,9 +583,16 @@ bool Sys_CampaignSelect_Run( const char *programDirectory, int argc, char **argv
 		{
 			return false;
 		}
+		// Jedi Outcast's story, with its menus and HUD. ui_style is Setup's saved Interface choice, so this one
+		// stays until New Game or a loaded game picks the story's own, or Setup changes it. The plain Jedi
+		// Academy launch keeps whichever interface was last used.
 		if ( !CampaignSelect_ArgumentsMention( argc, argv, "g_campaign" ) )
 		{
 			Q_strcat( extraCommandLine, (int)extraCommandLineSize, "+set g_campaign outcast " );
+		}
+		if ( !CampaignSelect_ArgumentsMention( argc, argv, "ui_style" ) )
+		{
+			Q_strcat( extraCommandLine, (int)extraCommandLineSize, "+set ui_style outcast " );
 		}
 		return true;
 
