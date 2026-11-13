@@ -1172,6 +1172,21 @@ static void AddPiece( const slicing::PosedMesh &mesh, const Simulation *wholeRag
 // Moves every vertex of a piece to where its bodies have it (smoothed between physics steps). The
 // positions are written relative to meshOrigin (the first body's centre), and meshRadius receives
 // how far the furthest vertex is from it.
+// The floor under a piece, for its shadow, as CG_PlayerShadow finds the one under a character. False when there is
+// none close below (the renderer is then not told of a floor, RF_SHADOW_PLANE, and the piece casts no shadow).
+static bool FindShadowPlane( const vec3_t origin, int ignoreEntity, float &shadowPlane )
+{
+	trace_t trace;
+	vec3_t end = { origin[0], origin[1], origin[2] - 128.0f };
+	gi.trace( &trace, origin, NULL, NULL, end, ignoreEntity, MASK_SOLID, G2_NOCOLLIDE, 0 );
+	if ( trace.startsolid || trace.allsolid || trace.fraction >= 1.0f )
+	{
+		return false;
+	}
+	shadowPlane = trace.endpos[2] + 1.0f;
+	return true;
+}
+
 static void BendPieceMesh( SlicedPiece &piece, float fraction, Vector3 &meshOrigin, float &meshRadius )
 {
 	Transform bodyTransforms[ragdoll::MAXIMUM_BODIES];
@@ -2052,7 +2067,9 @@ void G_Slice_AddMaimedCharacter( gentity_t *entity, const refEntity_t &drawnMode
 	meshEntity.axis[2][2] = 1.0f;
 	VectorCopy( drawnOrigin, meshEntity.origin );
 	VectorCopy( lightingOrigin, meshEntity.lightingOrigin );
-	meshEntity.renderfx = RF_LIGHTING_ORIGIN | RF_SHADOW_PLANE;	// (shadows as a character's, when they are on)
+	// shadows as the character's own would have been (the floor under it is the one the cgame found for it)
+	meshEntity.renderfx = RF_LIGHTING_ORIGIN | ( drawnModel.renderfx & RF_SHADOW_PLANE );
+	meshEntity.shadowPlane = drawnModel.shadowPlane;
 	meshEntity.radius = sqrtf( largestDistanceSquared );
 	for ( int channel = 0; channel < 4; channel++ )
 	{
@@ -2561,7 +2578,11 @@ void G_Slice_AddPiecesToScene( int renderTime )
 		entity.axis[2][2] = 1.0f;
 		meshOrigin.CopyToArray( entity.origin );
 		meshOrigin.CopyToArray( entity.lightingOrigin );
-		entity.renderfx = RF_LIGHTING_ORIGIN | RF_SHADOW_PLANE;	// (shadows as a character's, when they are on)
+		entity.renderfx = RF_LIGHTING_ORIGIN;
+		if ( FindShadowPlane( entity.origin, piece.sourceEntityNumber, entity.shadowPlane ) )
+		{
+			entity.renderfx |= RF_SHADOW_PLANE;	// (shadows as a character's, when they are on)
+		}
 		entity.radius = meshRadius;
 		for ( int channel = 0; channel < 4; channel++ )
 		{
