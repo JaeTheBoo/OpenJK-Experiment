@@ -64,13 +64,9 @@ typedef enum
 	CAMPAIGN_NOT_CHOSEN,
 	CAMPAIGN_JEDI_ACADEMY,
 	CAMPAIGN_JEDI_OUTCAST,
-	CAMPAIGN_JEDI_OUTCAST_ON_ACADEMY,	// Jedi Outcast's campaign on this engine and its game code
+	CAMPAIGN_JEDI_OUTCAST_ON_ACADEMY,	// --campaign=outcast-ja: this engine, with Jedi Outcast's story already chosen
 	CAMPAIGN_QUIT
 } campaignChoice_t;
-
-// Jedi Outcast's campaign on this engine keeps its saves and settings apart from Jedi Academy's,
-// in this folder of the engine's home folder (it is used as fs_game).
-static const char OUTCAST_ON_ACADEMY_GAME_FOLDER[]	= "outcast";
 
 // Values read from campaigns.ini. An empty string means "use the default".
 typedef struct
@@ -276,8 +272,7 @@ static campaignChoice_t CampaignSelect_AskPlayer( void )
 	const SDL_MessageBoxButtonData buttons[] =
 	{
 		{ SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT,	CAMPAIGN_JEDI_ACADEMY,	"Jedi Academy" },
-		{ 0,										CAMPAIGN_JEDI_OUTCAST,	"Jedi Outcast" },
-		{ 0,										CAMPAIGN_JEDI_OUTCAST_ON_ACADEMY,	"Jedi Outcast (Academy engine)" },
+		{ 0,										CAMPAIGN_JEDI_OUTCAST,	"Jedi Outcast (original)" },
 		{ SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT,	CAMPAIGN_QUIT,			"Quit" },
 	};
 
@@ -291,10 +286,10 @@ static campaignChoice_t CampaignSelect_AskPlayer( void )
 		dialogFlags,
 		NULL,
 		DIALOG_TITLE,
-		"Which campaign would you like to play?\n\n"
-		"Jedi Academy: create your own Jedi.\n"
-		"Jedi Outcast: play as Kyle Katarn.\n"
-		"Jedi Outcast (Academy engine): Kyle's campaign on Jedi Academy's engine (work in progress).",
+		"Which game would you like to start?\n\n"
+		"Jedi Academy: New Game lets you choose Jedi Academy's story or, when Jedi Outcast's\n"
+		"install location is set, Jedi Outcast's story as Kyle Katarn.\n"
+		"Jedi Outcast (original): the separate Jedi Outcast engine.",
 		(int)ARRAY_LEN( buttons ),
 		buttons,
 		NULL
@@ -308,8 +303,7 @@ static campaignChoice_t CampaignSelect_AskPlayer( void )
 		return CAMPAIGN_JEDI_ACADEMY;
 	}
 
-	if ( pressedButton == CAMPAIGN_JEDI_ACADEMY || pressedButton == CAMPAIGN_JEDI_OUTCAST
-		|| pressedButton == CAMPAIGN_JEDI_OUTCAST_ON_ACADEMY )
+	if ( pressedButton == CAMPAIGN_JEDI_ACADEMY || pressedButton == CAMPAIGN_JEDI_OUTCAST )
 	{
 		return (campaignChoice_t)pressedButton;
 	}
@@ -520,35 +514,33 @@ static bool CampaignSelect_BuildJediAcademyCommandLine( const char *programDirec
 
 /*
 ==================
-Jedi Outcast on the Academy engine
+Jedi Outcast's story on this engine
 ==================
 */
 
-// The Jedi Academy command line, plus Jedi Outcast's game data mounted beneath Jedi Academy's
-// (fs_outcastpath, which also tells the game code which campaign is played) and a folder of its own
-// for saves and settings. Returns false (after showing an error) if either game's data is missing.
-static bool CampaignSelect_BuildOutcastOnAcademyCommandLine( const char *programDirectory, const campaignSettings_t *settings,
-															 int argc, char **argv,
-															 char *extraCommandLine, size_t extraCommandLineSize )
+// Mounts Jedi Outcast's game data beneath Jedi Academy's (fs_outcastpath), so that New Game can offer
+// Jedi Outcast's story too (see code/game/g_outcast.h). Without a Jedi Outcast install location this
+// engine plays Jedi Academy alone; a wrong one is reported, and only stops the launch if required.
+static bool CampaignSelect_AddJediOutcastGameData( const char *programDirectory, const campaignSettings_t *settings,
+												   int argc, char **argv, bool required,
+												   char *extraCommandLine, size_t extraCommandLineSize )
 {
-	if ( !CampaignSelect_CheckJediOutcastGameData( programDirectory, settings )
-		|| !CampaignSelect_BuildJediAcademyCommandLine( programDirectory, settings, argc, argv,
-														extraCommandLine, extraCommandLineSize ) )
+	if ( CampaignSelect_ArgumentsMention( argc, argv, "fs_outcastpath" ) )
 	{
-		return false;
+		return true;	// given on the command line
+	}
+	if ( !settings->jediOutcastGameData[0] && !required )
+	{
+		return true;
+	}
+	if ( !CampaignSelect_CheckJediOutcastGameData( programDirectory, settings ) )
+	{
+		return !required;
 	}
 
-	char outcastCommands[MAX_OSPATH + 64];
-	if ( !CampaignSelect_ArgumentsMention( argc, argv, "fs_outcastpath" ) )
-	{
-		Com_sprintf( outcastCommands, sizeof( outcastCommands ), "+set fs_outcastpath \"%s\" ", settings->jediOutcastGameData );
-		Q_strcat( extraCommandLine, (int)extraCommandLineSize, outcastCommands );
-	}
-	if ( !CampaignSelect_ArgumentsMention( argc, argv, "fs_game" ) )
-	{
-		Com_sprintf( outcastCommands, sizeof( outcastCommands ), "+set fs_game %s ", OUTCAST_ON_ACADEMY_GAME_FOLDER );
-		Q_strcat( extraCommandLine, (int)extraCommandLineSize, outcastCommands );
-	}
+	char outcastCommand[MAX_OSPATH + 64];
+	Com_sprintf( outcastCommand, sizeof( outcastCommand ), "+set fs_outcastpath \"%s\" ", settings->jediOutcastGameData );
+	Q_strcat( extraCommandLine, (int)extraCommandLineSize, outcastCommand );
 	return true;
 }
 
@@ -575,15 +567,27 @@ bool Sys_CampaignSelect_Run( const char *programDirectory, int argc, char **argv
 	{
 	case CAMPAIGN_JEDI_ACADEMY:
 		return CampaignSelect_BuildJediAcademyCommandLine( programDirectory, &settings, argc, argv,
-														   extraCommandLine, extraCommandLineSize );
+														   extraCommandLine, extraCommandLineSize )
+			&& CampaignSelect_AddJediOutcastGameData( programDirectory, &settings, argc, argv, false,
+													  extraCommandLine, extraCommandLineSize );
 
 	case CAMPAIGN_JEDI_OUTCAST:
 		CampaignSelect_LaunchJediOutcast( programDirectory, &settings );
 		return false;
 
 	case CAMPAIGN_JEDI_OUTCAST_ON_ACADEMY:
-		return CampaignSelect_BuildOutcastOnAcademyCommandLine( programDirectory, &settings, argc, argv,
-																extraCommandLine, extraCommandLineSize );
+		if ( !CampaignSelect_BuildJediAcademyCommandLine( programDirectory, &settings, argc, argv,
+														  extraCommandLine, extraCommandLineSize )
+			|| !CampaignSelect_AddJediOutcastGameData( programDirectory, &settings, argc, argv, true,
+													   extraCommandLine, extraCommandLineSize ) )
+		{
+			return false;
+		}
+		if ( !CampaignSelect_ArgumentsMention( argc, argv, "g_campaign" ) )
+		{
+			Q_strcat( extraCommandLine, (int)extraCommandLineSize, "+set g_campaign outcast " );
+		}
+		return true;
 
 	default:
 		return false;

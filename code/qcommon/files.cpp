@@ -1837,47 +1837,76 @@ static qboolean FS_IsInsideOutcastPath( const char *osPath ) {
 }
 #endif
 
+#ifndef JK2_MODE
+static searchpath_t	fs_outcastOnlyPaths[64];	// copies of Jedi Outcast's search path entries
+static searchpath_t	*fs_allSearchPaths;			// the real list, while only those are searched
+#endif
+
+/*
+=============
+FS_BeginOutcastOnly / FS_EndOutcastOnly
+
+Between these, files are searched for in Jedi Outcast's game data only (fs_outcastpath), even where
+Jedi Academy's data has a file of the same name that hides it (Jedi Outcast's skeleton, its animation
+list, its dynamic music...). FS_BeginOutcastOnly returns qfalse, and changes nothing, when that data
+isn't mounted; only call FS_EndOutcastOnly after it returned qtrue. The search runs over copies of
+only Jedi Outcast's search path entries, so nothing else may change the search path in between.
+=============
+*/
+qboolean FS_BeginOutcastOnly( void ) {
+#ifdef JK2_MODE
+	return qfalse;
+#else
+	FS_AssertInitialised();
+
+	if ( !fs_outcastpath || !fs_outcastpath->string[0] || fs_allSearchPaths ) {
+		return qfalse;
+	}
+
+	int numOutcastPaths = 0;
+	for ( searchpath_t *search = fs_searchpaths; search && numOutcastPaths < (int)ARRAY_LEN( fs_outcastOnlyPaths ); search = search->next ) {
+		const char *osPath = search->pack ? search->pack->pakPathname : search->dir->fullpath;
+		if ( FS_IsInsideOutcastPath( osPath ) ) {
+			fs_outcastOnlyPaths[numOutcastPaths++] = *search;
+		}
+	}
+	if ( !numOutcastPaths ) {
+		return qfalse;
+	}
+	for ( int i = 0; i < numOutcastPaths; i++ ) {
+		fs_outcastOnlyPaths[i].next = ( i + 1 < numOutcastPaths ) ? &fs_outcastOnlyPaths[i + 1] : NULL;
+	}
+
+	fs_allSearchPaths = fs_searchpaths;
+	fs_searchpaths = &fs_outcastOnlyPaths[0];
+	return qtrue;
+#endif
+}
+
+void FS_EndOutcastOnly( void ) {
+#ifndef JK2_MODE
+	if ( fs_allSearchPaths ) {
+		fs_searchpaths = fs_allSearchPaths;
+		fs_allSearchPaths = NULL;
+	}
+#endif
+}
+
 /*
 =============
 FS_ReadOutcastFile
 
-Reads a file from Jedi Outcast's game data only, even where Jedi Academy's data has a file of the same
-name that hides it from FS_ReadFile (Jedi Outcast's skeleton and its animation list, for example).
-The search runs over copies of only Jedi Outcast's search path entries.
+Reads a file from Jedi Outcast's game data only, see FS_BeginOutcastOnly.
 =============
 */
 long FS_ReadOutcastFile( const char *qpath, void **buffer ) {
 	*buffer = NULL;
-#ifdef JK2_MODE
-	return -1;
-#else
-	FS_AssertInitialised();
-
-	if ( !fs_outcastpath || !fs_outcastpath->string[0] ) {
+	if ( !FS_BeginOutcastOnly() ) {
 		return -1;
 	}
-
-	searchpath_t outcastPaths[64];
-	int numOutcastPaths = 0;
-	for ( searchpath_t *search = fs_searchpaths; search && numOutcastPaths < (int)ARRAY_LEN( outcastPaths ); search = search->next ) {
-		const char *osPath = search->pack ? search->pack->pakPathname : search->dir->fullpath;
-		if ( FS_IsInsideOutcastPath( osPath ) ) {
-			outcastPaths[numOutcastPaths++] = *search;
-		}
-	}
-	if ( !numOutcastPaths ) {
-		return -1;
-	}
-	for ( int i = 0; i < numOutcastPaths; i++ ) {
-		outcastPaths[i].next = ( i + 1 < numOutcastPaths ) ? &outcastPaths[i + 1] : NULL;
-	}
-
-	searchpath_t *allPaths = fs_searchpaths;
-	fs_searchpaths = &outcastPaths[0];
 	const long length = FS_ReadFile( qpath, buffer );
-	fs_searchpaths = allPaths;
+	FS_EndOutcastOnly();
 	return length;
-#endif
 }
 
 /*

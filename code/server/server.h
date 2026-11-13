@@ -322,8 +322,7 @@ extern qboolean qbLoadTransition;
 //
 ///////////////////////////////////////////////
 
-#ifdef JK2_MODE
-// glue
+// Jedi Outcast's StripEd strings (strip.cpp), also read by Jedi Academy for Jedi Outcast's campaign
 class cStrings
 {
 private:
@@ -363,6 +362,5 @@ public:
 
 	virtual bool	UnderstandToken(int token, char *data );
 };
-#endif
 
 #endif	// #ifndef SERVER_H

@@ -20,7 +20,10 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 ===========================================================================
 */
 
-#ifdef JK2_MODE
+// Jedi Outcast's StripEd string packages (strip/*.sp). The Jedi Outcast engine uses them for all of
+// its text; Jedi Academy's (which uses StringEd, stringed_ingame.cpp) reads them only while Jedi
+// Outcast's campaign is played, see JK2SP_InitOutcastCampaign.
+
 // this include must remain at the top of every CPP file
 #include "../server/server.h"
 #include "q_shared.h"
@@ -1252,4 +1255,53 @@ void JK2SP_CheckForLanguageUpdates(void)
 	}
 }
 
+#ifndef JK2_MODE
+/*
+JK2SP_InitOutcastCampaign
+
+Jedi Outcast's campaign on Jedi Academy's engine: loads every one of Jedi Outcast's string packages
+(objectives, subtitles, level text...), in the language Jedi Academy is set to where Jedi Outcast has
+it. SE_GetString falls back to them for anything Jedi Academy's own strings lack.
+*/
+void JK2SP_InitOutcastCampaign(void)
+{
+	static const struct { const char *name; int language; } languages[] =
+	{
+		{ "english", SP_LANGUAGE_ENGLISH },
+		{ "french", SP_LANGUAGE_FRENCH },
+		{ "german", SP_LANGUAGE_GERMAN },
+		{ "italian", SP_LANGUAGE_ITALIAN },
+		{ "spanish", SP_LANGUAGE_SPANISH },
+	};
+	int language = SP_LANGUAGE_ENGLISH;
+	const char *academyLanguage = Cvar_VariableString( "se_language" );
+	for ( size_t i = 0; i < ARRAY_LEN( languages ); i++ )
+	{
+		if ( !Q_stricmp( academyLanguage, languages[i].name ) )
+		{
+			language = languages[i].language;
+		}
+	}
+
+	sp_language = Cvar_Get( "sp_language", va( "%d", language ), CVAR_ROM );
+	Cvar_Set( "sp_language", va( "%d", language ) );
+	sp_show_strip = Cvar_Get( "sp_show_strip", "0", 0 );
+	sp_leet = Cvar_Get( "sp_leet", "0", CVAR_ROM );
+	sp_language->modified = qfalse;
+
+	int numPackages = 0;
+	char **packages = FS_ListFiles( "strip", ".sp", &numPackages );
+	int numRegistered = 0;
+	for ( int i = 0; i < numPackages; i++ )
+	{
+		char package[MAX_QPATH];
+		COM_StripExtension( packages[i], package, sizeof( package ) );
+		if ( JK2SP_Register( package, SP_REGISTER_REQUIRED ) )
+		{
+			numRegistered++;
+		}
+	}
+	FS_FreeFileList( packages );
+	Com_Printf( "Loaded %d of Jedi Outcast's string packages\n", numRegistered );
+}
 #endif

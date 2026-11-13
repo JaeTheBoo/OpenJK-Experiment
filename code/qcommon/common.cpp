@@ -1169,6 +1169,10 @@ void Com_Init( char *commandLine ) {
 #else
 		SE_Init();	// Initialize StringEd
 		Com_Printf("Running Jedi Academy Mode\n");
+		if ( Cvar_VariableString( "fs_outcastpath" )[0] )
+		{//Jedi Outcast's campaign: its text is in its own string packages
+			JK2SP_InitOutcastCampaign();
+		}
 #endif
 
 		Sys_Init();	// this also detects CPU type, so I can now do this CPU check below...

@@ -448,6 +448,11 @@ if(BuildSPEngine OR BuildJK2SPEngine)
 	endfunction(add_sp_project)
 	if(BuildSPEngine)
 		add_sp_project(${SPEngine} "SP Client" ${SPDir} ${JKAInstallDir} ${JKASPClientComponent})
+		# New Game's choice between Jedi Outcast's and Jedi Academy's stories (see code/game/g_outcast.h),
+		# a loose menu file the engine finds in its own folder's base directory
+		install(FILES "${SPDir}/ui/campaign.menu"
+			DESTINATION "${JKAInstallDir}/base/ui"
+			COMPONENT ${JKASPClientComponent})
 	endif(BuildSPEngine)
 	if(BuildJK2SPEngine)
 		set(SPEngineDefines ${SPEngineDefines} "JK2_MODE")

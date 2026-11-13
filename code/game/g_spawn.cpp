@@ -596,6 +596,10 @@ void SP_NPC_Droid_Saber( gentity_t *self);
 void SP_waypoint (gentity_t *ent);
 void SP_waypoint_small (gentity_t *ent);
 void SP_waypoint_navgoal (gentity_t *ent);
+void SP_waypoint_navgoal_8 (gentity_t *ent);	// Jedi Outcast's, see g_outcast.h
+void SP_waypoint_navgoal_4 (gentity_t *ent);
+void SP_waypoint_navgoal_2 (gentity_t *ent);
+void SP_waypoint_navgoal_1 (gentity_t *ent);
 
 void SP_fx_runner( gentity_t *ent );
 void SP_fx_explosion_trail( gentity_t *ent );
@@ -840,6 +844,10 @@ spawn_t	spawns[] = {
 	{"waypoint", SP_waypoint},
 	{"waypoint_small", SP_waypoint_small},
 	{"waypoint_navgoal", SP_waypoint_navgoal},
+	{"waypoint_navgoal_8", SP_waypoint_navgoal_8},
+	{"waypoint_navgoal_4", SP_waypoint_navgoal_4},
+	{"waypoint_navgoal_2", SP_waypoint_navgoal_2},
+	{"waypoint_navgoal_1", SP_waypoint_navgoal_1},
 
 	{"fx_runner", SP_fx_runner},
 	{"fx_explosion_trail", SP_fx_explosion_trail},

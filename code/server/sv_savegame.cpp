@@ -1315,6 +1315,11 @@ qboolean SG_ReadSavegame(
 		INT_ID('M', 'P', 'C', 'M'),
 		sMapCmd);
 
+#ifndef JK2_MODE
+	// Which story the game belongs to (code/game/g_outcast.h): saves from before there was a choice
+	// don't hold it, and they are all Jedi Academy's
+	Cvar_Set( "g_campaign", "academy" );
+#endif
 	::SG_ReadCvars();
 
 	// read game state

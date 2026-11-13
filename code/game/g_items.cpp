@@ -27,6 +27,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "wp_saber.h"
 #include "../cgame/cg_local.h"
 #include "b_local.h"
+#include "g_outcast.h"
 
 extern qboolean	missionInfo_Updated;
 
@@ -472,12 +473,13 @@ int Pickup_Weapon (gentity_t *ent, gentity_t *other)
 		quantity = ent->item->quantity?ent->item->quantity:50;
 	}
 
-	// add the weapon
-	if ( other->client->ps.stats[STAT_WEAPONS] & ( 1 << ent->item->giTag ) )
+	// add the weapon (in Jedi Outcast's campaign, the player gets Jedi Academy's pistol for the Bryar)
+	const int weaponGiven = ( other->s.number < MAX_CLIENTS ) ? G_Outcast_PlayerWeapon( ent->item->giTag ) : ent->item->giTag;
+	if ( other->client->ps.stats[STAT_WEAPONS] & ( 1 << weaponGiven ) )
 	{
 		hadWeapon = qtrue;
 	}
-	other->client->ps.stats[STAT_WEAPONS] |= ( 1 << ent->item->giTag );
+	other->client->ps.stats[STAT_WEAPONS] |= ( 1 << weaponGiven );
 
 	if ( ent->item->giTag == WP_SABER && (!hadWeapon || ent->NPC_type != NULL) )
 	{//didn't have a saber or it is specifying a certain kind of saber to use

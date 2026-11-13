@@ -892,16 +892,47 @@ static qboolean UI_DeferMenuScript ( const char **args )
 ===============
 Jedi Outcast's campaign
 
-The campaign chooser can start this program with Jedi Outcast's game data beneath Jedi Academy's
-(fs_outcastpath). That campaign has no character to create: the player is Kyle Katarn, played with
-Jedi Academy's remade model, so New Game goes from the difficulty choice straight into its first level.
+The campaign chooser starts this program with Jedi Outcast's game data beneath Jedi Academy's when it
+knows where Jedi Outcast is installed (fs_outcastpath). New Game then asks which story to play
+(campaignMenu, ui/campaign.menu) and remembers the answer in g_campaign, which saved games keep.
+Jedi Outcast's story has no character to create: the player is Kyle Katarn, played with Jedi
+Academy's remade model, so its New Game goes from the difficulty choice straight into its first level.
 ===============
 */
 static void UI_SetSexandSoundForModel( const char *char_model );
+void UI_ParseMenu( const char *menuFile );
+
+static const char OUTCAST_CAMPAIGN_MENU[] = "campaignMenu";
+
+static qboolean UI_OutcastDataAvailable( void )
+{
+	return Cvar_VariableString( "fs_outcastpath" )[0] ? qtrue : qfalse;
+}
 
 static qboolean UI_IsOutcastCampaign( void )
 {
-	return Cvar_VariableString( "fs_outcastpath" )[0] ? qtrue : qfalse;
+	return ( UI_OutcastDataAvailable() && !Q_stricmp( Cvar_VariableString( "g_campaign" ), "outcast" ) ) ? qtrue : qfalse;
+}
+
+// Loads the menu that asks which story to play (only when there is a choice)
+static void UI_LoadOutcastCampaignMenu( void )
+{
+	if ( UI_OutcastDataAvailable() )
+	{
+		UI_ParseMenu( "ui/campaign.menu" );
+	}
+}
+
+// The "campaign" menu script: uiScript campaign outcast|academy. Starts that story's New Game.
+static void UI_ChooseCampaign( const char *campaign )
+{
+	const qboolean outcast = ( !Q_stricmp( campaign, "outcast" ) && UI_OutcastDataAvailable() ) ? qtrue : qfalse;
+	Cvar_Set( "g_campaign", outcast ? "outcast" : "academy" );
+
+	// Both stories go on to Jedi Academy's choice of difficulty (opened directly, not through
+	// UI_OutcastCampaign_OpenMenu, which would send it back here)
+	Menus_CloseAll();
+	Menus_OpenByName( "newgamefirstMenu" );
 }
 
 static void UI_StartOutcastCampaign( void )
@@ -928,16 +959,25 @@ static void UI_StartOutcastCampaign( void )
 	ui.Cmd_ExecuteText( EXEC_APPEND, "map kejim_post\n" );
 }
 
-// Called when a menu script opens a menu. In Jedi Outcast's campaign, the character creation that
-// follows the difficulty choice starts the game instead. Returns qtrue if the menu was replaced.
+// Called when a menu script opens a menu. Returns qtrue if the menu was replaced:
+//  - New Game's first menu (the difficulty choice) is preceded by the choice of story, when Jedi
+//    Outcast's game data is there to offer one;
+//  - in Jedi Outcast's story, the character creation that follows the difficulty choice starts the
+//    game instead.
 qboolean UI_OutcastCampaign_OpenMenu( const char *menuName )
 {
-	if ( !UI_IsOutcastCampaign() || Q_stricmp( menuName, "characterMenu" ) )
+	if ( !Q_stricmp( menuName, "newgamefirstMenu" ) && UI_OutcastDataAvailable() && Menus_FindByName( OUTCAST_CAMPAIGN_MENU ) )
 	{
-		return qfalse;
+		Menus_CloseAll();
+		Menus_OpenByName( OUTCAST_CAMPAIGN_MENU );
+		return qtrue;
 	}
-	UI_StartOutcastCampaign();
-	return qtrue;
+	if ( !Q_stricmp( menuName, "characterMenu" ) && UI_IsOutcastCampaign() )
+	{
+		UI_StartOutcastCampaign();
+		return qtrue;
+	}
+	return qfalse;
 }
 #endif // !JK2_MODE
 
@@ -1111,6 +1151,16 @@ static qboolean UI_RunMenuScript ( const char **args )
 
 			UI_CheckVid1Data(menuName,warningMenuName);
 		}
+#ifndef JK2_MODE
+		else if (Q_stricmp(name, "campaign") == 0)
+		{//New Game's choice of story (ui/campaign.menu): campaign outcast|academy
+			const char *campaign;
+			if ( String_Parse( args, &campaign ) )
+			{
+				UI_ChooseCampaign( campaign );
+			}
+		}
+#endif
 		else if (Q_stricmp(name, "startgame") == 0)
 		{
 			Menus_CloseAll();
@@ -3049,6 +3099,10 @@ void UI_LoadMenus(const char *menuFile, qboolean reset)
 		}
 	}
 	COM_EndParseSession();
+
+#ifndef JK2_MODE
+	UI_LoadOutcastCampaignMenu();	// New Game's choice of story, when there is one
+#endif
 
 	Com_Printf("UI menu load time = %d milli seconds\n", Sys_Milliseconds() - start);
 

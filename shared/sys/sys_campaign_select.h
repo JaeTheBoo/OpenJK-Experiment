@@ -20,15 +20,15 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 // sys_campaign_select.h -- campaign chooser shown when the Jedi Academy single player program starts.
 //
-// Before the engine starts, a dialog asks which campaign to play:
+// Before the engine starts, a dialog asks which game to start:
 //
-//   * Jedi Academy  - the engine continues starting up as normal and you create your own character.
-//   * Jedi Outcast  - the separate Jedi Outcast engine (openjo_sp) is started with the Jedi Outcast
+//   * Jedi Academy  - the engine continues starting up. When Jedi Outcast's install location is set,
+//                     its game data is mounted beneath Jedi Academy's (fs_outcastpath) and New Game
+//                     asks which story to play: Jedi Academy's (create your own character) or Jedi
+//                     Outcast's (as Kyle Katarn, on Jedi Academy's game code; see code/game/g_outcast.h).
+//   * Jedi Outcast (original)
+//                   - the separate Jedi Outcast engine (openjo_sp) is started with the Jedi Outcast
 //                     game data, where you play as Kyle Katarn, and this program exits.
-//   * Jedi Outcast on the Academy engine
-//                   - this engine continues starting up with Jedi Outcast's game data mounted beneath
-//                     Jedi Academy's (fs_outcastpath), and plays Jedi Outcast's campaign as Kyle on
-//                     Jedi Academy's game code. Its saves and settings live in an "outcast" folder.
 //   * Quit          - this program exits without starting anything.
 //
 // The install locations of both games are read from "campaigns.ini" next to the executable. A
@@ -37,7 +37,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // The dialog can be skipped with a launch argument, for shortcuts and automated testing:
 //   --campaign=academy    start Jedi Academy directly
 //   --campaign=outcast    start Jedi Outcast directly
-//   --campaign=outcast-ja start Jedi Outcast on the Academy engine directly
+//   --campaign=outcast-ja start Jedi Academy with Jedi Outcast's story already chosen (g_campaign)
 //
 // Only the Jedi Academy single player engine uses this. The Jedi Outcast engine, the multiplayer
 // engine and the dedicated server are unaffected.

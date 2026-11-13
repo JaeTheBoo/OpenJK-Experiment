@@ -85,6 +85,9 @@ const char				*JK2SP_GetStringTextString(const char *Reference);
 
 // Initialization
 void					JK2SP_Init(void);
+#ifndef JK2_MODE
+void					JK2SP_InitOutcastCampaign(void);	// Jedi Academy: Jedi Outcast's campaign only
+#endif
 void					JK2SP_CheckForLanguageUpdates(void);
 inline void				JK2SP_Shutdown(void)
 {

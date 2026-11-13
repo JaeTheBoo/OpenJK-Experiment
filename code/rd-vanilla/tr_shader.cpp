@@ -3795,8 +3795,36 @@ static void ScanAndLoadShaderFiles( void )
 			sum += summand;
 	}
 
+#ifndef JK2_MODE
+	// Jedi Outcast's campaign: Jedi Outcast's copies of the shader files that Jedi Academy's files of
+	// the same name hide (players.shader, imperial.shader...) hold shaders Jedi Academy lacks, such as
+	// Morgan Katarn's ghost. They go after all of Jedi Academy's text, so where both games define a
+	// shader, Jedi Academy's comes first and wins (ShaderEntryPtrs_Insert keeps the first).
+	char *outcastBuffers[MAX_SHADER_FILES] = { NULL };
+	if ( ri.Cvar_VariableString( "fs_outcastpath" )[0] )
+	{
+		for ( i = 0; i < numShaderFiles; i++ )
+		{
+			char filename[MAX_QPATH];
+			Com_sprintf( filename, sizeof( filename ), "shaders/%s", shaderFiles[i] );
+			const long length = ri.FS_ReadOutcastFile( filename, (void **)&outcastBuffers[i] );
+			if ( length <= 0 )
+			{
+				continue;
+			}
+			if ( buffers[i] && !strcmp( buffers[i], outcastBuffers[i] ) )
+			{//only Jedi Outcast has this file, and it was read above
+				ri.FS_FreeFile( outcastBuffers[i] );
+				outcastBuffers[i] = NULL;
+				continue;
+			}
+			sum += length;
+		}
+	}
+#endif
+
 	// build single large buffer
-	s_shaderText = (char *) R_Hunk_Alloc( sum + numShaderFiles*2, qtrue );
+	s_shaderText = (char *) R_Hunk_Alloc( sum + numShaderFiles*4, qtrue );
 	s_shaderText[0] = '\0';
 	textEnd = s_shaderText;
 
@@ -3811,6 +3839,19 @@ static void ScanAndLoadShaderFiles( void )
 		textEnd += strlen( textEnd );
 		ri.FS_FreeFile( buffers[i] );
 	}
+
+#ifndef JK2_MODE
+	for ( i = 0; i < numShaderFiles; i++ )
+	{
+		if ( !outcastBuffers[i] )
+			continue;
+
+		strcat( textEnd, outcastBuffers[i] );
+		strcat( textEnd, "\n" );
+		textEnd += strlen( textEnd );
+		ri.FS_FreeFile( outcastBuffers[i] );
+	}
+#endif
 
 	COM_Compress( s_shaderText );
 

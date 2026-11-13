@@ -1,0 +1,222 @@
+//----------------------------------------------------------------------------------------------
+// campaign.menu -- New Game's choice of story (OpenJK-Experiment).
+//
+// When Jedi Outcast's game data is mounted beneath Jedi Academy's (fs_outcastpath), New Game opens
+// this menu instead of going straight to the choice of difficulty (UI_OutcastCampaign_OpenMenu in
+// code/ui/ui_main.cpp). "uiScript campaign outcast|academy" sets g_campaign, which saved games keep,
+// and carries on to the difficulty menu. The art shown is Jedi Academy's own, referenced by name.
+//----------------------------------------------------------------------------------------------
+{
+	menuDef
+	{
+		name					"campaignMenu"
+		fullScreen				1
+		rect					0 0 640 480
+		visible					1
+		focusColor				1 1 1 1
+		descX					320
+		descY					380
+		descScale				1
+		descColor				1 .682 0 .8
+		descAlignment			ITEM_ALIGN_CENTER
+
+		onOpen
+		{
+			play				"sound/interface/transition.wav"
+			setfocus			outcastbutton
+		}
+
+		onESC
+		{
+			play				"sound/interface/esc.wav"
+			close				campaignMenu
+			open				mainMenu
+		}
+
+		// Backdrop
+		itemDef
+		{
+			name				backdrop
+			style				WINDOW_STYLE_SHADER
+			rect				0 0 640 480
+			background			"gfx/menus/main_background"
+			forecolor			1 1 1 1
+			visible				1
+			decoration
+		}
+		itemDef
+		{
+			name				side_text_left
+			style				WINDOW_STYLE_SHADER
+			rect				0 0 160 480
+			background			"gfx/menus/menu_side_text"
+			forecolor			1 1 1 1
+			visible				1
+			decoration
+		}
+		itemDef
+		{
+			name				side_text_right
+			style				WINDOW_STYLE_SHADER
+			rect				480 0 160 480
+			background			"gfx/menus/menu_side_text_right"
+			forecolor			1 1 1 1
+			visible				1
+			decoration
+		}
+		itemDef
+		{
+			name				panel
+			style				WINDOW_STYLE_SHADER
+			rect				156 154 320 240
+			background			"gfx/menus/main_centerblue"
+			forecolor			1 1 1 1
+			visible				1
+			decoration
+		}
+
+		// Title
+		itemDef
+		{
+			name				title
+			style				WINDOW_STYLE_SHADER
+			background			"gfx/menus/menu_blendbox"
+			text				"CHOOSE YOUR STORY"
+			rect				100 164 440 16
+			font				3
+			textscale			0.7
+			textalign			ITEM_ALIGN_CENTER
+			textalignx			225
+			textaligny			-1
+			forecolor			.549 .854 1 1
+			visible				1
+			decoration
+		}
+
+		// Jedi Outcast
+		itemDef
+		{
+			name				outcast_glow
+			style				WINDOW_STYLE_SHADER
+			rect				225 220 190 40
+			background			"gfx/menus/menu_buttonback"
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+		itemDef
+		{
+			name				outcastbutton
+			text				"Jedi Outcast"
+			type				ITEM_TYPE_BUTTON
+			style				WINDOW_STYLE_EMPTY
+			font				3
+			textscale			1
+			rect				225 220 190 40
+			textalignx			95
+			textaligny			8
+			textalign			ITEM_ALIGN_CENTER
+			textstyle			3
+			forecolor			1 .682 0 1
+			visible				1
+			descText			"Kyle Katarn's story: Jedi Knight II"
+			action
+			{
+				play			"sound/interface/button1.wav"
+				uiScript		campaign outcast
+			}
+			mouseEnter
+			{
+				show			outcast_glow
+			}
+			mouseExit
+			{
+				hide			outcast_glow
+			}
+		}
+
+		// Jedi Academy
+		itemDef
+		{
+			name				academy_glow
+			style				WINDOW_STYLE_SHADER
+			rect				225 280 190 40
+			background			"gfx/menus/menu_buttonback"
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+		itemDef
+		{
+			name				academybutton
+			text				"Jedi Academy"
+			type				ITEM_TYPE_BUTTON
+			style				WINDOW_STYLE_EMPTY
+			font				3
+			textscale			1
+			rect				225 280 190 40
+			textalignx			95
+			textaligny			8
+			textalign			ITEM_ALIGN_CENTER
+			textstyle			3
+			forecolor			1 .682 0 1
+			visible				1
+			descText			"Create your own Jedi: Jedi Academy"
+			action
+			{
+				play			"sound/interface/button1.wav"
+				uiScript		campaign academy
+			}
+			mouseEnter
+			{
+				show			academy_glow
+			}
+			mouseExit
+			{
+				hide			academy_glow
+			}
+		}
+
+		// Back to the main menu
+		itemDef
+		{
+			name				back_glow
+			style				WINDOW_STYLE_SHADER
+			rect				59 444 130 24
+			background			"gfx/menus/menu_buttonback"
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+		itemDef
+		{
+			name				backbutton
+			text				"BACK"
+			type				ITEM_TYPE_BUTTON
+			style				WINDOW_STYLE_EMPTY
+			font				3
+			textscale			1.1
+			rect				59 444 130 24
+			textalignx			65
+			textaligny			-1
+			textalign			ITEM_ALIGN_CENTER
+			textstyle			3
+			forecolor			1 .682 0 1
+			visible				1
+			action
+			{
+				play			"sound/interface/esc.wav"
+				close			campaignMenu
+				open			mainMenu
+			}
+			mouseEnter
+			{
+				show			back_glow
+			}
+			mouseExit
+			{
+				hide			back_glow
+			}
+		}
+	}
+}

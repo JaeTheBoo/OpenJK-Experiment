@@ -397,7 +397,15 @@ static qboolean Music_ParseLeveldata( gsl::czstring psLevelName )
 
 	gsl::czstring filename = sFILENAME_DMS;
 	CGenericParser2 Parser;
-	if( !Parser.Parse( filename ) )
+	// Jedi Outcast's story (g_campaign, chosen at New Game) plays Jedi Outcast's levels, whose music
+	// Jedi Outcast's dms.dat describes (Jedi Academy's file of the same name hides it)
+	const qboolean outcastMusic = ( !Q_stricmp( Cvar_VariableString( "g_campaign" ), "outcast" ) && FS_BeginOutcastOnly() ) ? qtrue : qfalse;
+	const bool parsed = Parser.Parse( filename );
+	if ( outcastMusic )
+	{
+		FS_EndOutcastOnly();
+	}
+	if( !parsed )
 	{
 		Music_Parse_Error( filename, "Error using GP to parse file\n" );
 	}

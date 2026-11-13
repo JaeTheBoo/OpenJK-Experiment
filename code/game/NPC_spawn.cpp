@@ -30,6 +30,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "g_functions.h"
 #include "wp_saber.h"
 #include "g_vehicles.h"
+#include "g_outcast.h"
 
 extern qboolean G_CheckInSolid (gentity_t *self, qboolean fix);
 extern void ClientUserinfoChanged( int clientNum );
@@ -439,7 +440,10 @@ void NPC_SetMiscDefaultData( gentity_t *ent )
 			|| ent->client->NPC_class == CLASS_LUKE )
 		{//good jedi
 			ent->client->enemyTeam = TEAM_ENEMY;
-			if ( ent->spawnflags & JSF_AMBUSH )
+			// Jedi Outcast's levels give NPC_Kyle this flag as DROPTOFLOOR, which is what NPC_Kyle's
+			// own description calls it; there Kyle was never an ambusher (g_outcast.h)
+			const qboolean outcastKyle = ( ent->client->NPC_class == CLASS_KYLE && G_IsOutcastCampaign() ) ? qtrue : qfalse;
+			if ( ( ent->spawnflags & JSF_AMBUSH ) && !outcastKyle )
 			{//ambusher
 				ent->NPC->scriptFlags |= SCF_IGNORE_ALERTS;
 				ent->client->noclip = true;//hang

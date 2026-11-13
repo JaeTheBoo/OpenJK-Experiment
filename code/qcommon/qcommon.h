@@ -518,6 +518,9 @@ void	FS_FreeFile( void *buffer );
 // frees the memory returned by FS_ReadFile
 
 long	FS_ReadOutcastFile( const char *qpath, void **buffer );
+qboolean FS_BeginOutcastOnly( void );
+void	FS_EndOutcastOnly( void );
+// between these, files are only searched for in Jedi Outcast's game data (qtrue if it is mounted)
 // like FS_ReadFile, but only from Jedi Outcast's game data (fs_outcastpath), even where a file of the
 // same name hides it; -1 when it is not there (always, without fs_outcastpath)
 

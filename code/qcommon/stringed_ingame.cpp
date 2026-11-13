@@ -1022,6 +1022,13 @@ const char *SE_GetString( const char *psPackageAndStringReference )
 		}
 	}
 
+	// Jedi Outcast's campaign: Jedi Outcast's own text (its string packages are only loaded then,
+	// see JK2SP_InitOutcastCampaign)
+	if ( sp_language )
+	{
+		return JK2SP_GetStringTextString( sReference );
+	}
+
 	// should never get here, but fall back anyway... (except we DO use this to see if there's a debug-friendly key bind, which may not exist)
 	//
 //	__ASSERT(0);

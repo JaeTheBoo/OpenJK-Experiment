@@ -25,6 +25,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #include "cg_media.h"
 #include "../game/objectives.h"
+#include "../game/g_outcast.h"
 
 
 // For printing objectives
@@ -73,10 +74,13 @@ static void ObjectivePrint_Line(const int color, const int objectIndex, int &mis
 
 	int iYPixelsPerLine = cgi_R_Font_HeightPixels(cgs.media.qhFontMedium, 1.0f);
 
-	cgi_SP_GetStringTextString( va("OBJECTIVES_%s",objectiveTable[objectIndex].name) , finalText, sizeof(finalText) );
+	// Jedi Outcast's campaign has its own objectives in these slots (g_outcast.h)
+	const qboolean outcastObjective = G_IsOutcastCampaign();
+	const char *objectiveName = outcastObjective ? G_Outcast_ObjectiveName( objectIndex ) : objectiveTable[objectIndex].name;
+	cgi_SP_GetStringTextString( va("OBJECTIVES_%s",objectiveName) , finalText, sizeof(finalText) );
 
 	// A hack to be able to count prisoners
-	if (objectIndex==T2_RANCOR_OBJ5)
+	if (objectIndex==T2_RANCOR_OBJ5 && !outcastObjective)
 	{
 		char value[64];
 		int	currTotal, minTotal;
@@ -223,7 +227,7 @@ static void ObjectivePrint_Line(const int color, const int objectIndex, int &mis
 		}
 	}
 
-	if (objectIndex == T3_BOUNTY_OBJ1)
+	if (objectIndex == T3_BOUNTY_OBJ1 && !outcastObjective)
 	{
 		y =objectiveStartingYpos + (iYPixelsPerLine * missionYcnt);
 		if (obj_graphics[1])

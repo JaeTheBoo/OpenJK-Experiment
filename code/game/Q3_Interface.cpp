@@ -40,6 +40,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "wp_saber.h"
 #include "g_vehicles.h"
 #include "g_navigator.h"
+#include "g_outcast.h"
 #include "qcommon/ojk_saved_game_helper.h"
 
 extern	cvar_t	*com_buildScript;
@@ -757,7 +758,13 @@ static void Q3_SetObjective(const char *ObjEnum, int status)
 
 	client = &level.clients[0];
 
-	objectiveID = GetIDForString( objectiveTable, ObjEnum );
+	// Jedi Outcast's campaign names its own objectives (g_outcast.h)
+	objectiveID = G_IsOutcastCampaign() ? G_Outcast_ObjectiveSlot( ObjEnum ) : GetIDForString( objectiveTable, ObjEnum );
+	if ( objectiveID < 0 || objectiveID >= MAX_OBJECTIVES )
+	{//unknown: there is no slot to write to
+		Quake3Game()->DebugPrint( IGameInterface::WL_ERROR, "Q3_SetObjective: unknown objective \"%s\"\n", ObjEnum );
+		return;
+	}
 	objective = &client->sess.mission_objectives[objectiveID];
 	objectivesShown = &client->sess.missionObjectivesShown;
 
@@ -3304,6 +3311,10 @@ static void Q3_SetWeapon (int entID, const char *wp_name)
 		return;
 	}
 
+	if ( self->s.number < MAX_CLIENTS )
+	{//Jedi Outcast's campaign: the player gets Jedi Academy's own pistol and melee (g_outcast.h)
+		wp = G_Outcast_PlayerWeapon( wp );
+	}
 	G_SetWeapon( self, wp );
 }
 
