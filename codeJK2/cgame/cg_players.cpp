@@ -2863,14 +2863,16 @@ void CG_PlayerPowerups( centity_t *cent )
 }
 
 #define	SHADOW_DISTANCE		128
+#define	SHADOW_STENCIL_DISTANCE	512
 static qboolean _PlayerShadow( const vec3_t origin, const float orientation, float *const shadowPlane, const float radius ) {
 	vec3_t		end, mins = {-7, -7, 0}, maxs = {7, 7, 2};
 	trace_t		trace;
 	float		alpha;
 
 	// send a trace down from the player to the ground
+	// (stencil shadows are not faded with height, so let them reach further)
 	VectorCopy( origin, end );
-	end[2] -= SHADOW_DISTANCE;
+	end[2] -= CG_MODEL_SHADOWS() ? SHADOW_STENCIL_DISTANCE : SHADOW_DISTANCE;
 
 	cgi_CM_BoxTrace( &trace, origin, end, mins, maxs, 0, MASK_PLAYERSOLID );
 
@@ -4240,7 +4242,10 @@ void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, saber
 	}
 
 	// always add a light because sabers cast a nice glow before they slice you in half!!  or something...
-	cgi_R_AddLightToScene( mid, (length*2.0f) + (Q_flrand(0.0f, 1.0f)*8.0f), rgb[0], rgb[1], rgb[2] );
+	// (along the whole blade, from the hilt to the tip: the renderer makes it a light at the middle where it can't)
+	vec3_t tip;
+	VectorMA( origin, length, dir, tip );
+	cgi_R_AddLineLightToScene( origin, tip, (length*2.0f) + (Q_flrand(0.0f, 1.0f)*8.0f), rgb[0], rgb[1], rgb[2] );
 
 	memset( &saber, 0, sizeof( refEntity_t ));
 
@@ -4850,7 +4855,7 @@ void CG_Player( centity_t *cent ) {
 		// add the shadow
 		shadow = CG_PlayerShadow( cent, &shadowPlane );
 
-		if ( (cg_shadows.integer == 2) || (cg_shadows.integer == 3 && shadow) )
+		if ( (CG_MODEL_SHADOWS() || cg_shadows.integer == 3) && shadow )
 		{
 			ent.renderfx |= RF_SHADOW_PLANE;
 		}
@@ -4999,7 +5004,7 @@ Ghoul2 Insert Start
 			ent.renderfx = RF_THIRD_PERSON;			// only draw in mirrors
 		}
 
-		if ( (cg_shadows.integer == 2) || (cg_shadows.integer == 3 && shadow) )
+		if ( (CG_MODEL_SHADOWS() || cg_shadows.integer == 3) && shadow )
 		{
 			ent.renderfx |= RF_SHADOW_PLANE;
 		}
@@ -5649,7 +5654,7 @@ Ghoul2 Insert End
 		}
 	}
 
-	if ( (cg_shadows.integer == 2) || (cg_shadows.integer == 3 && shadow) )
+	if ( (CG_MODEL_SHADOWS() || cg_shadows.integer == 3) && shadow )
 	{
 		renderfx |= RF_SHADOW_PLANE;
 	}

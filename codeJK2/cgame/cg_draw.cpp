@@ -180,6 +180,8 @@ static void CG_DrawTalk(centity_t	*cent)
 		color[2] = colorTable[CT_BLACK][2];
 		color[3] = 0.350F;
 
+		cgi_R_Set2DAnchor( ANCHOR_LEFT );	// the corner of the screen
+
 		cgi_R_SetColor(color);	// Background
 		CG_DrawPic( 5, 27,  50, 64,	cgs.media.ammoslider );
 
@@ -213,6 +215,8 @@ static void CG_DrawTalk(centity_t	*cent)
 		cgi_R_SetColor(colorTable[CT_LTPURPLE1]);	// Bottom
 		CG_DrawPic( 5, 90, 64, 16,	cgs.media.talkingbot );
 		cgi_R_SetColor(NULL);
+
+		cgi_R_Set2DAnchor( ANCHOR_CENTRE );
 	}
 }
 
@@ -734,7 +738,9 @@ static void CG_DrawBatteryCharge( void )
 		cgi_R_SetColor( color );
 
 		// batteries were just charged
+		cgi_R_Set2DAnchor( ANCHOR_RIGHT );
 		CG_DrawPic( 605, 295, 24, 32, cgs.media.batteryChargeShader );
+		cgi_R_Set2DAnchor( ANCHOR_CENTRE );
 	}
 }
 
@@ -751,6 +757,8 @@ static void CG_DrawHUD( centity_t *cent )
 
 	if (cgi_UI_GetMenuInfo("lefthud",&x,&y))
 	{
+		cgi_R_Set2DAnchor( ANCHOR_LEFT );	// stuck to the left edge of the screen
+
 		// Draw all the HUD elements --eez
 		cgi_UI_Menu_Paint( cgi_UI_GetMenuByName( "lefthud" ), qtrue );
 
@@ -765,10 +773,14 @@ static void CG_DrawHUD( centity_t *cent )
 		CG_DrawArmor(x,y);
 		CG_DrawHealth(x,y);
 		CG_DrawHUDLeftFrame2(x,y);
+
+		cgi_R_Set2DAnchor( ANCHOR_CENTRE );
 	}
 
 	if (cgi_UI_GetMenuInfo("righthud",&x,&y))
 	{
+		cgi_R_Set2DAnchor( ANCHOR_RIGHT );	// stuck to the right edge of the screen
+
 		// Draw all the HUD elements --eez
 		cgi_UI_Menu_Paint( cgi_UI_GetMenuByName( "righthud" ), qtrue );
 
@@ -795,6 +807,8 @@ static void CG_DrawHUD( centity_t *cent )
 		CG_DrawAmmo(cent,x,y);
 		CG_DrawMessageLit(cent,x,y);
 		CG_DrawHUDRightFrame2(x,y);
+
+		cgi_R_Set2DAnchor( ANCHOR_CENTRE );
 	}
 }
 
@@ -916,6 +930,25 @@ static void CG_DrawBinocularNumbers( qboolean power )
 
 /*
 ================
+CG_DrawScreenMask
+
+A picture over the whole 640x480 screen that must keep its shape, as a scope's round lens: on a wider screen it is
+centred instead of stretched, and its own left and right edges are drawn across the sides (black for the scopes).
+With the colour already set, which is kept.
+================
+*/
+static void CG_DrawScreenMask( qhandle_t mask )
+{
+	// (beside the 640 wide area, however wide the screen is: off a 4:3 screen)
+	cgi_R_DrawStretchPic( -SCREEN_WIDTH, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0.002f, 0.0f, 0.002f, 1.0f, mask );
+	cgi_R_DrawStretchPic( SCREEN_WIDTH, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0.998f, 0.0f, 0.998f, 1.0f, mask );
+	cgi_R_Set2DAnchor( ANCHOR_KEEP_SHAPE );
+	CG_DrawPic( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, mask );
+	cgi_R_Set2DAnchor( ANCHOR_CENTRE );
+}
+
+/*
+================
 CG_DrawZoomMask
 
 ================
@@ -987,7 +1020,7 @@ static void CG_DrawZoomMask( void )
 			CG_DrawPic( 82, 94, 16, 16, cgs.media.binocularCircle );
 		}
 
-		CG_DrawPic( 0, 0, 640, 480, cgs.media.binocularMask );
+		CG_DrawScreenMask( cgs.media.binocularMask );
 
 		if ( power )
 		{
@@ -1058,7 +1091,7 @@ static void CG_DrawZoomMask( void )
 
 		// Draw target mask
 		cgi_R_SetColor( colorTable[CT_WHITE] );
-		CG_DrawPic( 0, 0, 640, 480, cgs.media.disruptorMask );
+		CG_DrawScreenMask( cgs.media.disruptorMask );
 
 		// apparently 99.0f is the full zoom level
 		if ( level >= 99 )
@@ -1196,7 +1229,7 @@ static void CG_DrawZoomMask( void )
 			CG_DrawPic( 65, 94, 16, 16, cgs.media.binocularCircle );
 		}
 
-		CG_DrawPic( 0, 0, 640, 480, cgs.media.laGogglesMask );
+		CG_DrawScreenMask( cgs.media.laGogglesMask );
 	}
 }
 
@@ -1258,7 +1291,9 @@ static void CG_DrawPickupItem( void ) {
 		{
 			CG_RegisterItemVisuals( value );
 			cgi_R_SetColor( fadeColor );
+			cgi_R_Set2DAnchor( ANCHOR_RIGHT );
 			CG_DrawPic( 573, 340, ICON_SIZE, ICON_SIZE, cg_items[ value ].icon );
+			cgi_R_Set2DAnchor( ANCHOR_CENTRE );
 			//CG_DrawBigString( ICON_SIZE + 16, 398, bg_itemlist[ value ].classname, fadeColor[0] );
 			//CG_DrawProportionalString( ICON_SIZE + 16, 398,
 			//	bg_itemlist[ value ].classname, CG_SMALLFONT,fadeColor );
@@ -2099,7 +2134,9 @@ static float CG_DrawSnapshot( float y ) {
 		cg.latestSnapshotNum, cgs.serverCommandSequence );
 
 	w = cgi_R_Font_StrLenPixels(s, cgs.media.qhFontMedium, 1.0f);
+	cgi_R_Set2DAnchor( ANCHOR_RIGHT );
 	cgi_R_Font_DrawString(635 - w, y+2, s, colorTable[CT_LTGOLD1], cgs.media.qhFontMedium, -1, 1.0f);
+	cgi_R_Set2DAnchor( ANCHOR_CENTRE );
 
 	return y + BIGCHAR_HEIGHT + 10;
 }
@@ -2142,7 +2179,9 @@ static float CG_DrawFPS( float y ) {
 
 	s = va( "%ifps", fps );
 	const int w = cgi_R_Font_StrLenPixels(s, cgs.media.qhFontMedium, 1.0f);
+	cgi_R_Set2DAnchor( ANCHOR_RIGHT );
 	cgi_R_Font_DrawString(635 - w, y+2, s, colorTable[CT_LTGOLD1], cgs.media.qhFontMedium, -1, 1.0f);
+	cgi_R_Set2DAnchor( ANCHOR_CENTRE );
 
 	return y + BIGCHAR_HEIGHT + 10;
 }
@@ -2166,7 +2205,9 @@ static float CG_DrawTimer( float y ) {
 	s = va( "%i:%i%i", mins, tens, seconds );
 
 	w = cgi_R_Font_StrLenPixels(s, cgs.media.qhFontMedium, 1.0f);
+	cgi_R_Set2DAnchor( ANCHOR_RIGHT );
 	cgi_R_Font_DrawString(635 - w, y+2, s, colorTable[CT_LTGOLD1], cgs.media.qhFontMedium, -1, 1.0f);
+	cgi_R_Set2DAnchor( ANCHOR_CENTRE );
 
 	return y + BIGCHAR_HEIGHT + 10;
 }

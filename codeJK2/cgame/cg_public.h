@@ -198,6 +198,8 @@ Ghoul2 Insert End
 
 	CG_OPENJK_MENU_PAINT,
 	CG_OPENJK_GETMENU_BYNAME,
+	CG_OPENJK_R_SET2DANCHOR,
+	CG_OPENJK_R_ADDLINELIGHTTOSCENE,
 } cgameImport_t;
 
 //----------------------------------------------

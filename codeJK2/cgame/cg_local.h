@@ -554,6 +554,8 @@ extern	vmCvar_t		cg_bobpitch;
 extern	vmCvar_t		cg_bobroll;
 extern	vmCvar_t		cg_swingSpeed;
 extern	vmCvar_t		cg_shadows;
+// the shadows the renderer makes from the characters' own triangles: stencil volumes (2), shadow maps (4), ray traced (5)
+#define CG_MODEL_SHADOWS()	( cg_shadows.integer == 2 || cg_shadows.integer == 4 || cg_shadows.integer == 5 )
 extern	vmCvar_t		cg_paused;
 extern	vmCvar_t		cg_drawTimer;
 extern	vmCvar_t		cg_drawFPS;
@@ -1015,8 +1017,21 @@ void	cgi_R_GetLighting( const vec3_t origin, vec3_t ambientLight, vec3_t directe
 // significant construction
 void	cgi_R_AddPolyToScene( qhandle_t hShader , int numVerts, const polyVert_t *verts );
 void	cgi_R_AddLightToScene( const vec3_t org, float intensity, float r, float g, float b );
+void	cgi_R_AddLineLightToScene( const vec3_t start, const vec3_t end, float intensity, float r, float g, float b );
+
+// the lights of blaster bolts in flight and where they hit (cg_weapons.cpp), and fading flashes (cg_localents.cpp)
+qboolean	CG_BoltLightColor( int weapon, qboolean alt, vec3_t rgb, qboolean *flash );
+void	CG_BoltLight( centity_t *cent, int weapon, qboolean alt );
+void	CG_BoltFlash( int weapon, qboolean alt, const vec3_t origin, const vec3_t dir );
+void	CG_AddLightFlash( const vec3_t origin, float radius, const vec3_t color, int duration );
 void	cgi_R_RenderScene( const refdef_t *fd );
 void	cgi_R_SetColor( const float *rgba );	// NULL = 1,1,1,1
+
+// Where the 2D drawing that follows sticks to on a screen wider than 4:3 (it is centred in the 4:3 area otherwise).
+// The corner parts of the HUD use these, and put it back to ANCHOR_CENTRE. ANCHOR_KEEP_SHAPE: centred, and the
+// pictures that span the whole 640 wide area too (they are stretched over the screen otherwise).
+enum { ANCHOR_LEFT = -1, ANCHOR_CENTRE = 0, ANCHOR_RIGHT = 1, ANCHOR_KEEP_SHAPE = 2 };
+void	cgi_R_Set2DAnchor( int anchor );
 void	cgi_R_DrawStretchPic( float x, float y, float w, float h,
 	float s1, float t1, float s2, float t2, qhandle_t hShader );
 void	cgi_R_DrawScreenShot( float x, float y, float w, float h);

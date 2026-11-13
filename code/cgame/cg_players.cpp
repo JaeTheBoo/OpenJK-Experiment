@@ -3448,14 +3448,16 @@ static void CG_PlayerPowerups( centity_t *cent )
 }
 
 #define	SHADOW_DISTANCE		128
+#define	SHADOW_STENCIL_DISTANCE	512
 static qboolean _PlayerShadow( const vec3_t origin, const float orientation, float *const shadowPlane, const float radius, qhandle_t markShader ) {
 	vec3_t		end, mins = {-7, -7, 0}, maxs = {7, 7, 2};
 	trace_t		trace;
 	float		alpha;
 
 	// send a trace down from the player to the ground
+	// (stencil shadows are not faded with height, so let them reach further)
 	VectorCopy( origin, end );
-	end[2] -= SHADOW_DISTANCE;
+	end[2] -= CG_MODEL_SHADOWS() ? SHADOW_STENCIL_DISTANCE : SHADOW_DISTANCE;
 
 	cgi_CM_BoxTrace( &trace, origin, end, mins, maxs, 0, MASK_PLAYERSOLID );
 
@@ -3468,7 +3470,7 @@ static qboolean _PlayerShadow( const vec3_t origin, const float orientation, flo
 
 	// no mark for stencil or projection shadows
 	if ( cg_shadows.integer == 1
-		|| (in_camera && cg_shadows.integer == 2) )//don't want stencil shadows during a cinematic
+		|| (in_camera && CG_MODEL_SHADOWS()) )//don't want stencil shadows during a cinematic
 	{
 		// fade the shadow out with height
 		alpha = 1.0 - trace.fraction;
@@ -4744,7 +4746,7 @@ void CG_AddRefEntityWithPowerups( refEntity_t *ent, int powerups, centity_t *cen
 		}
 		else
 		{
-			if (cg_renderToTextureFX.integer && cg_shadows.integer != 2 && cgs.glconfig.stencilBits >= 4)
+			if (cg_renderToTextureFX.integer && !CG_MODEL_SHADOWS() && cgs.glconfig.stencilBits >= 4)
 			{
 				cgi_R_SetRefractProp(1.0f, 0.0f, qfalse, qfalse); //don't need to do this every frame.. but..
 				ent->customShader = 2; //crazy "refractive" shader
@@ -5677,7 +5679,7 @@ static void CG_DoSaberLight( saberInfo_t *saber )
 		}
 	}
 
-	vec3_t		positions[MAX_BLADES*2], mid={0}, rgbs[MAX_BLADES*2], rgb={0};
+	vec3_t		positions[MAX_BLADES*2], mid={0}, rgbs[MAX_BLADES*2], rgb={0}, hilt={0};
 	float		lengths[MAX_BLADES*2]={0}, totallength = 0, numpositions = 0, dist, diameter = 0;
 	int			i, j;
 
@@ -5700,6 +5702,7 @@ static void CG_DoSaberLight( saberInfo_t *saber )
 				{//first blade, store middle of that as midpoint
 					VectorMA( saber->blade[i].muzzlePoint, saber->blade[i].length*0.5, saber->blade[i].muzzleDir, mid );
 					VectorCopy( rgbs[i], rgb );
+					VectorCopy( saber->blade[i].muzzlePoint, hilt );
 				}
 				numpositions++;
 			}
@@ -5749,7 +5752,17 @@ static void CG_DoSaberLight( saberInfo_t *saber )
 			}
 		}
 
-		cgi_R_AddLightToScene( mid, diameter + (Q_flrand(0.0f, 1.0f)*8.0f), rgb[0], rgb[1], rgb[2] );
+		if ( numpositions == 1 )
+		{// one blade: along it, from the hilt to the tip (as CG_DoSaber's)
+			vec3_t tip;
+			VectorSubtract( mid, hilt, tip );
+			VectorAdd( mid, tip, tip );
+			cgi_R_AddLineLightToScene( hilt, tip, diameter*0.7f + (Q_flrand(0.0f, 1.0f)*3.0f), rgb[0], rgb[1], rgb[2] );
+		}
+		else
+		{
+			cgi_R_AddLightToScene( mid, diameter + (Q_flrand(0.0f, 1.0f)*8.0f), rgb[0], rgb[1], rgb[2] );
+		}
 	}
 }
 
@@ -5800,9 +5813,11 @@ static void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax
 	// always add a light because sabers cast a nice glow before they slice you in half!!  or something...
 	if ( doLight )
 	{//FIXME: RGB combine all the colors of the sabers you're using into one averaged color!
-		vec3_t rgb={1,1,1};
+		// along the whole blade, from the hilt to the tip (the renderer makes it a light at the middle where it can't)
+		vec3_t rgb={1,1,1}, tip;
 		CG_RGBForSaberColor( color, rgb );
-		cgi_R_AddLightToScene( mid, (length*1.4f) + (Q_flrand(0.0f, 1.0f)*3.0f), rgb[0], rgb[1], rgb[2] );
+		VectorMA( origin, length, dir, tip );
+		cgi_R_AddLineLightToScene( origin, tip, (length*1.4f) + (Q_flrand(0.0f, 1.0f)*3.0f), rgb[0], rgb[1], rgb[2] );
 	}
 
 	memset( &saber, 0, sizeof( refEntity_t ));
@@ -6934,12 +6949,12 @@ Ghoul2 Insert Start
 		{//ghost!
 			ent.renderfx = RF_THIRD_PERSON;			// only draw in mirrors
 		}
-		else if (cg_shadows.integer == 2 && (ent.renderfx & RF_THIRD_PERSON))
+		else if (CG_MODEL_SHADOWS() && (ent.renderfx & RF_THIRD_PERSON))
 		{ //show stencil shadow in first person now because we can -rww
 			ent.renderfx |= RF_SHADOW_ONLY;
 		}
 
-		if ( (cg_shadows.integer == 2 && !in_camera) || (cg_shadows.integer == 3 && shadow) )
+		if ( ((CG_MODEL_SHADOWS() && !in_camera) || cg_shadows.integer == 3) && shadow )
 		{
 			ent.renderfx |= RF_SHADOW_PLANE;
 		}
@@ -8050,7 +8065,7 @@ Ghoul2 Insert End
 		}
 	}
 
-	if ( (cg_shadows.integer == 2) || (cg_shadows.integer == 3 && shadow) )
+	if ( (CG_MODEL_SHADOWS() || cg_shadows.integer == 3) && shadow )
 	{
 		renderfx |= RF_SHADOW_PLANE;
 	}

@@ -1027,6 +1027,31 @@ qboolean MenuParse_fadeCycle( itemDef_t *item)
 	return qtrue;
 }
 
+// "Desktop resolution" in the language of the game (the games' own strings have no such words; in Latin-1, as theirs)
+static const char *UI_DesktopResolutionLabel( void )
+{
+#ifdef JK2_MODE
+	switch ( sp_language->integer )
+	{
+	case SP_LANGUAGE_FRENCH:	return "R\xe9solution du bureau";
+	case SP_LANGUAGE_GERMAN:	return "Desktop-Aufl\xf6sung";
+	case SP_LANGUAGE_ITALIAN:	return "Risoluzione del desktop";
+	case SP_LANGUAGE_SPANISH:	return "Resoluci\xf3n del escritorio";
+	default:					return "Desktop resolution";
+	}
+#else
+	if ( !Q_stricmp( se_language->string, "french" ) )
+		return "R\xe9solution du bureau";
+	if ( !Q_stricmp( se_language->string, "german" ) )
+		return "Desktop-Aufl\xf6sung";
+	if ( !Q_stricmp( se_language->string, "italian" ) )
+		return "Risoluzione del desktop";
+	if ( !Q_stricmp( se_language->string, "spanish" ) )
+		return "Resoluci\xf3n del escritorio";
+	return "Desktop resolution";
+#endif
+}
+
 /*
 ===============
 Item_ApplyHacks
@@ -1111,25 +1136,580 @@ static void Item_ApplyHacks( itemDef_t *item ) {
 		}
 	}
 
-#ifdef JK2_MODE
-	if ( item->type == ITEM_TYPE_MULTI && item->window.name && !Q_stricmp( item->window.name, "video_mode") && item->cvar && !Q_stricmp( item->cvar, "r_ext_texture_filter_anisotropic" ) ) {
+	if ( item->type == ITEM_TYPE_MULTI && item->window.name && !Q_stricmp( item->window.name, "video_mode") && item->cvar && !Q_stricmp( item->cvar, "ui_r_mode" ) ) {
+		// The stock menu only offers a fixed list of 4:3 modes (r_mode 3-10), which can't represent the desktop
+		// resolution or any widescreen mode. Replace it with the desktop resolution plus every mode the display
+		// reports, and select by value ("desktop" or "WIDTHxHEIGHT") through ui_r_resolution instead.
+		// UI_UpdateVideoSetup translates the selection back to r_mode/r_customwidth/r_customheight.
+		multiDef_t *multiPtr = (multiDef_t *)item->typeData;
+		char availableModes[1024];
+		int modeWidth[MAX_MULTI_CVARS], modeHeight[MAX_MULTI_CVARS];
+		int numModes = 0;
+		int i, j;
+
+		DC->getCVarString( "r_availableModes", availableModes, sizeof( availableModes ) );
+		for ( const char *p = availableModes; *p && numModes < MAX_MULTI_CVARS; )
 		{
-			memset(item->typeData, 0, sizeof(multiDef_t));
+			int w, h, len = 0;
+			if ( sscanf( p, "%dx%d%n", &w, &h, &len ) >= 2 && len > 0 )
+			{
+				p += len;
+				if ( w < 640 || h < 480 )
+					continue;	// too small for the menus to be usable
+				for ( i = 0; i < numModes; i++ )
+				{
+					if ( modeWidth[i] == w && modeHeight[i] == h )
+						break;
+				}
+				if ( i == numModes )
+				{
+					modeWidth[numModes] = w;
+					modeHeight[numModes] = h;
+					numModes++;
+				}
+			}
+			else
+			{
+				// skip the unparseable token
+				while ( *p && *p != ' ' )
+					p++;
+			}
+			while ( *p == ' ' )
+				p++;
 		}
-		editFieldDef_t *editPtr = NULL;
 
-		item->cvarFlags = CVAR_DISABLE;
-		item->type = ITEM_TYPE_SLIDER;
+		if ( !numModes )
+		{
+			// no mode list available, offer some common resolutions
+			static const int fallbackModes[][2] = {
+				{ 800, 600 }, { 1024, 768 }, { 1280, 720 }, { 1280, 1024 }, { 1366, 768 }, { 1600, 900 },
+				{ 1920, 1080 }, { 2560, 1080 }, { 2560, 1440 }, { 3440, 1440 }, { 3840, 2160 }
+			};
+			for ( i = 0; i < (int)ARRAY_LEN( fallbackModes ); i++ )
+			{
+				modeWidth[i] = fallbackModes[i][0];
+				modeHeight[i] = fallbackModes[i][1];
+			}
+			numModes = ARRAY_LEN( fallbackModes );
+		}
 
-		Item_ValidateTypeData(item);
+		// sort by pixel count, then width
+		for ( i = 1; i < numModes; i++ )
+		{
+			int w = modeWidth[i], h = modeHeight[i];
+			for ( j = i - 1; j >= 0 && (modeWidth[j] * modeHeight[j] > w * h || (modeWidth[j] * modeHeight[j] == w * h && modeWidth[j] > w)); j-- )
+			{
+				modeWidth[j + 1] = modeWidth[j];
+				modeHeight[j + 1] = modeHeight[j];
+			}
+			modeWidth[j + 1] = w;
+			modeHeight[j + 1] = h;
+		}
 
-		editPtr = (editFieldDef_t *)item->typeData;
-		editPtr->minVal = 0.5f;
-		editPtr->maxVal = cls.glconfig.maxTextureFilterAnisotropy;
-		editPtr->defVal = 1.0f;
-		Com_Printf( "Converted anisotropic filter field to slider.\n");
+		// if there are too many to fit, drop the smallest ones
+		int first = 0;
+		if ( numModes > MAX_MULTI_CVARS - 1 )
+			first = numModes - ( MAX_MULTI_CVARS - 1 );
+
+		memset( multiPtr, 0, sizeof( *multiPtr ) );
+		multiPtr->strDef = qtrue;
+		multiPtr->cvarList[0] = String_Alloc( UI_DesktopResolutionLabel() );
+		multiPtr->cvarStr[0] = String_Alloc( "desktop" );
+		multiPtr->count = 1;
+		for ( i = first; i < numModes; i++ )
+		{
+			multiPtr->cvarList[multiPtr->count] = String_Alloc( va( "%d x %d", modeWidth[i], modeHeight[i] ) );
+			multiPtr->cvarStr[multiPtr->count] = String_Alloc( va( "%dx%d", modeWidth[i], modeHeight[i] ) );
+			multiPtr->count++;
+		}
+		item->cvar = String_Alloc( "ui_r_resolution" );
+		Com_Printf( "Replaced video mode field with %d display resolutions.\n", multiPtr->count );
 	}
+
+	if ( ( item->type == ITEM_TYPE_MULTI || item->type == ITEM_TYPE_SLIDER ) && item->window.name && !Q_stricmp( item->window.name, "video_mode") && item->cvar && !Q_stricmp( item->cvar, "r_ext_texture_filter_anisotropic" ) ) {
+		// The stock row only turns anisotropic filtering on or off (Jedi Outcast), or is a slider over any number
+		// (Jedi Academy). Offer the levels the graphics card supports instead.
+		multiDef_t *multiPtr;
+
+#ifdef JK2_MODE
+		item->cvarFlags = CVAR_DISABLE;	// (greyed out rather than hidden when the card can't do it)
 #endif
+		if ( item->type != ITEM_TYPE_MULTI )
+		{
+			item->type = ITEM_TYPE_MULTI;
+			item->typeData = NULL;
+			Item_ValidateTypeData( item );
+		}
+		multiPtr = (multiDef_t *)item->typeData;
+		memset( multiPtr, 0, sizeof( *multiPtr ) );
+		multiPtr->cvarList[0] = String_Alloc( "Off" );
+		multiPtr->cvarValue[0] = 0;
+		multiPtr->count = 1;
+		for ( int level = 2; level <= 16 && level <= cls.glconfig.maxTextureFilterAnisotropy; level *= 2 )
+		{
+			multiPtr->cvarList[multiPtr->count] = String_Alloc( va( "%dx", level ) );
+			multiPtr->cvarValue[multiPtr->count] = (float)level;
+			multiPtr->count++;
+		}
+		item->descText = String_Alloc( "Keeps textures sharp on floors and walls seen at a slant. Higher is sharper." );
+		Com_Printf( "Replaced anisotropic filter field with %d levels.\n", multiPtr->count );
+	}
+
+	// The shadows row offers none, simple and volumetric (stencil volumes). Add soft ones (shadow maps, cg_shadows 4)
+	// where the renderer can draw them. (Ray tracing has a row of its own, Menu_AddEffectRows.)
+	if ( item->type == ITEM_TYPE_MULTI && item->cvar && !Q_stricmp( item->cvar, "cg_shadows" ) && item->typeData ) {
+		static const struct { const char *name; float value; const char *avail; } extra[] = {
+			{ "Soft", 4, "r_shadowMapsAvail" },
+		};
+		multiDef_t *multiPtr = (multiDef_t *)item->typeData;
+
+		for ( size_t e = 0; e < ARRAY_LEN( extra ); e++ )
+		{
+			bool there = false;
+			for ( int i = 0; i < multiPtr->count; i++ )
+			{
+				there = there || multiPtr->cvarValue[i] == extra[e].value;
+			}
+			if ( multiPtr->strDef || multiPtr->count <= 0 || multiPtr->count >= MAX_MULTI_CVARS || there || !DC->getCVarValue( extra[e].avail ) )
+			{
+				continue;
+			}
+			multiPtr->cvarList[multiPtr->count] = String_Alloc( extra[e].name );
+			multiPtr->cvarValue[multiPtr->count] = extra[e].value;
+			multiPtr->count++;
+			item->descText = String_Alloc( "Shadows of the characters. Soft: shaped like the character, falling on walls and steps too, "
+				"with edges that blur further from the character. With Ray Tracing on, Volumetric and Soft are ray traced." );
+			Com_Printf( "Added %s shadows to the shadows field.\n", extra[e].name );
+		}
+	}
+
+	// The stock video menu has a row for compressed textures that is not shown any more. Use it for antialiasing.
+	if ( item->type == ITEM_TYPE_MULTI && item->window.name && !Q_stricmp( item->window.name, "compress_textures") && item->cvar && !Q_stricmp( item->cvar, "ui_r_ext_compress_textures" ) ) {
+		multiDef_t *multiPtr = (multiDef_t *)item->typeData;
+
+		memset( multiPtr, 0, sizeof( *multiPtr ) );
+		multiPtr->cvarList[0] = String_Alloc( "Off" );
+		multiPtr->cvarValue[0] = 0;
+		multiPtr->count = 1;
+		for ( int samples = 2; samples <= 8; samples *= 2 )
+		{
+			multiPtr->cvarList[multiPtr->count] = String_Alloc( va( "%dx", samples ) );
+			multiPtr->cvarValue[multiPtr->count] = (float)samples;
+			multiPtr->count++;
+		}
+		item->window.group = (char *)String_Alloc( "video" );	// (the group is what makes the row appear with the others)
+		item->window.name = (char *)String_Alloc( "antialiasing" );
+		item->cvar = String_Alloc( "ui_r_ext_multisample" );
+		item->text = (char *)String_Alloc( "Anti-Aliasing:" );
+		item->descText = String_Alloc( "Smooths the jagged edges of everything. Higher is smoother and slower. Needs Apply Changes." );
+#ifndef JK2_MODE
+		// the rows of Jedi Academy are 14 apart and the one for video sync is the last, put this one below it
+		item->window.rectClient.y = 342;
+		item->mouseEnter = String_Alloc( "\"show\" \"button_glow\" \"setitemrect\" \"button_glow\" \"260\" \"342\" \"340\" \"20\" " );
+		item->mouseExit = String_Alloc( "\"hide\" \"button_glow\" " );
+#endif
+		Com_Printf( "Turned the compressed textures field into an antialiasing field.\n" );
+	}
+}
+
+/*
+================
+The rows of the "More Video" page, scrolled
+
+When there are more rows than the page has room for (Menu_AddEffectRows), as many as fit are shown with a scroll bar
+beside them: its arrows move a row, its track a page, its thumb can be dragged, and the mouse wheel over the rows
+scrolls them too. The rows out of view are hidden (they take no focus or click), and a row the keys move the focus to
+is scrolled into view.
+================
+*/
+void Item_UpdatePosition(itemDef_t *item);
+
+#define ROW_SCROLL_BAR	12.0f		// the width of the bar, and the height of its arrows and thumb
+
+typedef struct {
+	menuDef_t	*menu;
+	itemDef_t	*driverButton;		// shown with the page: the bar is shown then
+	itemDef_t	*rows[24];
+	const char	*enter[24];			// what a row does when the mouse comes over it, by the place it is shown at
+	int			numRows, visible, first;
+	float		left, firstY, pitch, barX;
+	bool		dragging;
+	float		dragOffset;
+} rowScroll_t;
+
+static rowScroll_t rowScrolls[4];	// by menu: the main and the in-game setup each have the page
+
+static rowScroll_t *RowScroll_For( const menuDef_t *menu )
+{
+	for ( size_t i = 0; menu && i < ARRAY_LEN( rowScrolls ); i++ )
+	{
+		if ( rowScrolls[i].menu == menu )
+			return &rowScrolls[i];
+	}
+	return NULL;
+}
+
+// the menu's rows when they scroll and the page is shown
+static rowScroll_t *RowScroll_Shown( const menuDef_t *menu )
+{
+	rowScroll_t *rs = RowScroll_For( menu );
+	return rs && rs->driverButton && ( rs->driverButton->window.flags & WINDOW_VISIBLE ) ? rs : NULL;
+}
+
+// the rows at their places for the first one shown, the ones out of view hidden
+static void RowScroll_Place( rowScroll_t &rowScroll )
+{
+	for ( int i = 0; i < rowScroll.numRows; i++ )
+	{
+		itemDef_t *row = rowScroll.rows[i];
+		const int at = i - rowScroll.first;
+		if ( at >= 0 && at < rowScroll.visible )
+		{
+			row->window.rectClient.y = rowScroll.firstY + at * rowScroll.pitch;
+			row->mouseEnter = rowScroll.enter[at];
+			row->window.flags |= WINDOW_VISIBLE;
+			Item_UpdatePosition( row );
+		}
+		else
+		{
+			row->window.flags &= ~( WINDOW_VISIBLE | WINDOW_HASFOCUS | WINDOW_MOUSEOVER );
+		}
+	}
+}
+
+static void RowScroll_By( rowScroll_t &rowScroll, int rows )
+{
+	rowScroll.first = Com_Clampi( 0, rowScroll.numRows - rowScroll.visible, rowScroll.first + rows );
+	RowScroll_Place( rowScroll );
+}
+
+// before the page is painted (showing the page shows every row of its group): a row with the focus in view
+static void RowScroll_Sync( menuDef_t *menu )
+{
+	rowScroll_t *rs = RowScroll_Shown( menu );
+	if ( !rs )
+	{
+		return;
+	}
+	rowScroll_t &rowScroll = *rs;
+	for ( int i = 0; i < rowScroll.numRows; i++ )
+	{
+		if ( rowScroll.rows[i]->window.flags & WINDOW_HASFOCUS )
+		{
+			if ( i < rowScroll.first )
+				rowScroll.first = i;
+			else if ( i >= rowScroll.first + rowScroll.visible )
+				rowScroll.first = i - rowScroll.visible + 1;
+		}
+	}
+	RowScroll_Place( rowScroll );
+}
+
+// where the thumb is, and how far it can go
+static float RowScroll_ThumbY( const rowScroll_t &rowScroll, float *track )
+{
+	const float top = rowScroll.menu->window.rect.y + rowScroll.firstY;
+	*track = rowScroll.visible * rowScroll.pitch - 3.0f * ROW_SCROLL_BAR;
+	return top + ROW_SCROLL_BAR + *track * rowScroll.first / Q_max( rowScroll.numRows - rowScroll.visible, 1 );
+}
+
+static void RowScroll_Paint( menuDef_t *menu )
+{
+	const rowScroll_t *rs = RowScroll_Shown( menu );
+	if ( !rs )
+	{
+		return;
+	}
+	const rowScroll_t &rowScroll = *rs;
+	const float x = menu->window.rect.x + rowScroll.barX, top = menu->window.rect.y + rowScroll.firstY;
+	const float h = rowScroll.visible * rowScroll.pitch;
+	float track;
+	const float thumb = RowScroll_ThumbY( rowScroll, &track );
+	DC->drawHandlePic( x, top, ROW_SCROLL_BAR, ROW_SCROLL_BAR, DC->Assets.scrollBarArrowUp );
+	DC->drawHandlePic( x, top + ROW_SCROLL_BAR, ROW_SCROLL_BAR, h - 2.0f * ROW_SCROLL_BAR, DC->Assets.scrollBar );
+	DC->drawHandlePic( x, top + h - ROW_SCROLL_BAR, ROW_SCROLL_BAR, ROW_SCROLL_BAR, DC->Assets.scrollBarArrowDown );
+	DC->drawHandlePic( x, thumb, ROW_SCROLL_BAR, ROW_SCROLL_BAR, DC->Assets.scrollBarThumb );
+}
+
+// the clicks on the bar and the mouse wheel over the rows; qtrue when it took the key
+static qboolean RowScroll_HandleKey( menuDef_t *menu, int key, qboolean down )
+{
+	rowScroll_t *rs = RowScroll_Shown( menu );
+	if ( !rs )
+	{
+		for ( size_t i = 0; i < ARRAY_LEN( rowScrolls ); i++ )
+			rowScrolls[i].dragging = false;
+		return qfalse;
+	}
+	rowScroll_t &rowScroll = *rs;
+	if ( !down )
+	{
+		if ( key == A_MOUSE1 && rowScroll.dragging )
+		{
+			rowScroll.dragging = false;
+			return qtrue;
+		}
+		return qfalse;
+	}
+	// the keys moving the focus past the rows shown: one more row in view first (the menu then moves the focus to it)
+	const int step = ( key == A_CURSOR_UP || key == A_KP_8 ) ? -1 : ( key == A_CURSOR_DOWN || key == A_KP_2 || key == A_TAB ) ? 1 : 0;
+	for ( int i = 0; step && i < rowScroll.numRows; i++ )
+	{
+		const int next = i + step;
+		if ( ( rowScroll.rows[i]->window.flags & WINDOW_HASFOCUS ) && next >= 0 && next < rowScroll.numRows
+			&& ( next < rowScroll.first || next >= rowScroll.first + rowScroll.visible ) )
+		{
+			RowScroll_By( rowScroll, step );
+			break;
+		}
+	}
+	if ( step )
+	{
+		return qfalse;
+	}
+
+	const float cx = DC->cursorx, cy = DC->cursory;
+	const float x = menu->window.rect.x + rowScroll.barX, top = menu->window.rect.y + rowScroll.firstY;
+	const float h = rowScroll.visible * rowScroll.pitch;
+	if ( cy < top || cy >= top + h || cx < menu->window.rect.x + rowScroll.left || cx >= x + ROW_SCROLL_BAR )
+	{
+		return qfalse;
+	}
+	if ( key == A_MWHEELUP || key == A_MWHEELDOWN )
+	{
+		RowScroll_By( rowScroll, key == A_MWHEELUP ? -1 : 1 );
+		return qtrue;
+	}
+	if ( key != A_MOUSE1 || cx < x )
+	{
+		return qfalse;
+	}
+	float track;
+	const float thumb = RowScroll_ThumbY( rowScroll, &track );
+	if ( cy < top + ROW_SCROLL_BAR )
+		RowScroll_By( rowScroll, -1 );
+	else if ( cy >= top + h - ROW_SCROLL_BAR )
+		RowScroll_By( rowScroll, 1 );
+	else if ( cy >= thumb && cy < thumb + ROW_SCROLL_BAR )
+	{
+		rowScroll.dragging = true;
+		rowScroll.dragOffset = cy - thumb;
+	}
+	else
+		RowScroll_By( rowScroll, cy < thumb ? -rowScroll.visible : rowScroll.visible );
+	return qtrue;
+}
+
+// the thumb dragged; qtrue while it is
+static qboolean RowScroll_MouseMove( menuDef_t *menu, float y )
+{
+	rowScroll_t *rs = RowScroll_For( menu );
+	if ( !rs || !rs->dragging )
+	{
+		return qfalse;
+	}
+	rowScroll_t &rowScroll = *rs;
+	float track;
+	RowScroll_ThumbY( rowScroll, &track );
+	const float top = menu->window.rect.y + rowScroll.firstY + ROW_SCROLL_BAR;
+	const int span = rowScroll.numRows - rowScroll.visible;
+	const int first = track > 0.0f ? (int)floorf( ( y - rowScroll.dragOffset - top ) / track * span + 0.5f ) : 0;
+	RowScroll_By( rowScroll, first - rowScroll.first );
+	return qtrue;
+}
+
+/*
+================
+Menu_AddEffectRows
+
+The "More Video" page of Setup has room for one more row. Make room for one row for each of the screen effects and
+the shader dynamic lights, for the ones this renderer can do, by bringing the rows closer, and move the button for
+the driver info down to the end. Called when the last item of the page, that button, has been read. Does nothing if
+the page is not the one of the stock menu.
+================
+*/
+static void Menu_AddEffectRows( menuDef_t *menu, itemDef_t *driverButton )
+{
+	static const struct {
+		const char	*name, *cvar, *avail, *text, *desc;
+	} effects[] = {
+		{ "ssao", "r_ssao", "r_postAvail", "Ambient Occlusion:", "Soft shading in corners and where things meet. Adds depth." },
+		{ "bloom", "r_bloom", "r_postAvail", "Bloom:", "A soft glow around the brightest lights." },
+		{ "smaa", "r_smaa", "r_smaaAvail", "SMAA Edge Smoothing:", "Smooths edges without blurring textures. Works with or without Anti-Aliasing." },
+		{ "dlightglsl", "r_dlightGLSL", "r_glslAvail", "Shader Dynamic Lights:", "Light from sabers, blasters and explosions follows the shape of what it falls on. Detailed: it picks out the bumps of the surface too." },
+		{ "lightshafts", "r_lightShafts", "r_postAvail", "Light Shafts:", "Rays of sunlight through gaps and around edges, on levels with a sun." },
+		{ "eyeadaptation", "r_eyeAdaptation", "r_postAvail", "Eye Adaptation:", "Dark places brighten as your eyes get used to them, over a second or two." },
+		{ "raytracing", "r_rayTracing", "r_rtAvail", "Ray Tracing:", "Exact shadows of the characters, and the light of sabers, blasters and explosions stops at walls. High: smoother shadows, slower." },
+		{ "lamplighting", "r_lampLighting", NULL, "Lamp Lighting:", "Characters lit from the level's own lamps, each from its side, as their shadows say (Jedi Outcast levels have them)." },
+		{ "softparticles", "r_softParticles", "r_softAvail", "Soft Particles:", "Smoke, sparks and glows fade where they meet walls and floors, instead of ending in a hard line." },
+	};
+	itemDef_t	*rows[24];
+	int			numRows = 0;
+	itemDef_t	*brightness = NULL, *brightText = NULL, *marks = NULL, *glow = NULL;
+
+	for ( int i = 0; i < menu->itemCount; i++ )
+	{
+		itemDef_t *item = menu->items[i];
+
+		if ( !item->window.name )
+			continue;
+		if ( item->window.group && !Q_stricmp( item->window.group, "video2" ) )
+		{
+			if ( !Q_stricmp( item->window.name, "brightness" ) )
+				brightness = item;
+			else if ( !Q_stricmp( item->window.name, "bright_text" ) )
+				brightText = item;
+			else if ( item != driverButton && ( item->type == ITEM_TYPE_MULTI || item->type == ITEM_TYPE_SLIDER ) && numRows < 16 )
+			{
+				rows[numRows++] = item;
+				if ( !Q_stricmp( item->window.name, "wall_marks" ) )
+					marks = item;
+			}
+		}
+		else if ( !Q_stricmp( item->window.name, "advancedvideobutton_glow" ) )
+			glow = item;
+	}
+	if ( !brightness || !brightText || !marks || marks->type != ITEM_TYPE_MULTI || !marks->typeData || numRows < 5 )
+		return;
+
+	// one new row for each effect that can be used, a copy of the row of the wall marks (an off and on row)
+	for ( size_t e = 0; e < ARRAY_LEN( effects ); e++ )
+	{
+		if ( ( effects[e].avail && !DC->getCVarValue( effects[e].avail ) ) || menu->itemCount >= MAX_MENUITEMS )
+			continue;
+
+		itemDef_t *row = (itemDef_t *)UI_Alloc( sizeof( itemDef_t ) );
+		memcpy( row, marks, sizeof( itemDef_t ) );
+		row->typeData = NULL;
+		Item_ValidateTypeData( row );
+		memcpy( row->typeData, marks->typeData, sizeof( multiDef_t ) );
+		row->window.name = (char *)String_Alloc( effects[e].name );
+		row->cvar = String_Alloc( effects[e].cvar );
+		row->text = (char *)String_Alloc( effects[e].text );
+		row->descText = String_Alloc( effects[e].desc );
+		row->cvarTest = NULL;
+		row->cvarFlags = 0;
+		if ( !Q_stricmp( effects[e].name, "raytracing" ) )
+		{
+			// three steps instead of off and on: the "off" of the row it was copied from (already in the language of
+			// the game), then the two qualities
+			static const char *const names[] = { "Medium", "High" };
+			static const float values[] = { 1.0f, 2.0f };
+			multiDef_t *multiPtr = (multiDef_t *)row->typeData;
+
+			multiPtr->cvarValue[0] = 0.0f;
+			multiPtr->count = 1;
+			for ( size_t k = 0; k < ARRAY_LEN( names ) && multiPtr->count < MAX_MULTI_CVARS; k++ )
+			{
+				multiPtr->cvarList[multiPtr->count] = String_Alloc( names[k] );
+				multiPtr->cvarValue[multiPtr->count] = values[k];
+				multiPtr->count++;
+			}
+			multiPtr->strDef = qfalse;
+		}
+		else if ( !Q_stricmp( effects[e].name, "lamplighting" ) )
+		{
+			// off (copied), with ray tracing (the default: its shadows are cast from the same lamps), always
+			static const char *const names[] = { "With Ray Tracing", "Always" };
+			multiDef_t *multiPtr = (multiDef_t *)row->typeData;
+
+			multiPtr->count = 1;
+			for ( size_t k = 0; k < ARRAY_LEN( names ) && multiPtr->count < MAX_MULTI_CVARS; k++ )
+			{
+				multiPtr->cvarList[multiPtr->count] = String_Alloc( names[k] );
+				multiPtr->cvarValue[multiPtr->count] = (float)( k + 1 );
+				multiPtr->count++;
+			}
+			multiPtr->strDef = qfalse;
+		}
+		else if ( !Q_stricmp( effects[e].name, "dlightglsl" ) )
+		{
+			// off, on (copied), and on with the bumps of the surface
+			multiDef_t *multiPtr = (multiDef_t *)row->typeData;
+
+			if ( multiPtr->count == 2 )
+			{
+				multiPtr->cvarList[2] = String_Alloc( "Detailed" );
+				multiPtr->cvarValue[2] = 2.0f;
+				multiPtr->count = 3;
+				multiPtr->strDef = qfalse;
+			}
+		}
+		menu->items[menu->itemCount++] = row;
+		rows[numRows++] = row;
+	}
+	if ( numRows == 0 )
+		return;
+
+	// The rows, from the top: the slider for the brightness, then every row, then the driver info
+#ifdef JK2_MODE
+	const float x = 305, w = 300, brightnessY = 244, firstY = 264, pitch = 15, barHeight = 17, panelGrows = 0;
+	const char *bar = "highlight10";	// the one bar for all the rows, put where the row is
+#else
+	// (there is no room above the rows, so the panel they are on is made taller instead, as far as they need)
+	const float x = 260, w = 340, brightnessY = 0, firstY = 287, pitch = 13, barHeight = 14, panelGrows = 1;
+	const char *bar = "button_glow";
+#endif
+	if ( brightnessY > 0 )
+		brightness->window.rectClient.y = brightnessY;
+
+	// as many rows as fit above the driver info, at the bottom of the screen; with more, a scroll bar (RowScroll_*)
+	const int visible = Q_min( numRows, Q_max( 4, (int)( ( SCREEN_HEIGHT - 4 - ( barHeight + 2 ) - 2 - firstY ) / pitch ) ) );
+	rowScroll_t *rs = RowScroll_For( menu );	// (the same menu again: ui_load, vid_restart)
+	for ( size_t i = 0; !rs && i < ARRAY_LEN( rowScrolls ); i++ )
+	{
+		if ( !rowScrolls[i].menu )
+			rs = &rowScrolls[i];
+	}
+	static rowScroll_t unused;			// (more menus with the page than slots: those don't scroll)
+	rowScroll_t &rowScroll = rs ? *rs : unused;
+	memset( &rowScroll, 0, sizeof( rowScroll ) );
+	for ( int i = 0; i < numRows; i++ )
+	{
+		rows[i]->window.rectClient.h = pitch;
+		rows[i]->mouseExit = String_Alloc( va( "\"hide\" \"%s\" ", bar ) );
+		rowScroll.rows[i] = rows[i];
+	}
+	for ( int at = 0; at < visible; at++ )
+	{
+		rowScroll.enter[at] = String_Alloc( va( "\"show\" \"%s\" \"setitemrect\" \"%s\" \"%.0f\" \"%.0f\" \"%.0f\" \"%.0f\" ", bar, bar, x, firstY + at * pitch, w, barHeight ) );
+	}
+	rowScroll.numRows = numRows;
+	rowScroll.visible = visible;
+	rowScroll.left = x;
+	rowScroll.firstY = firstY;
+	rowScroll.pitch = pitch;
+#ifdef JK2_MODE
+	rowScroll.barX = x + w + 2;
+#else
+	rowScroll.barX = x + w - ROW_SCROLL_BAR - 4;	// (inside the panel)
+#endif
+	RowScroll_Place( rowScroll );
+	if ( numRows > visible )
+	{
+		rowScroll.menu = menu;		// (the bar and its keys: only then)
+		rowScroll.driverButton = driverButton;
+	}
+
+	const float driverY = firstY + visible * pitch + 2;
+	driverButton->window.rectClient.y = driverY;
+	if ( panelGrows )
+	{
+		for ( int i = 0; i < menu->itemCount; i++ )
+		{
+			itemDef_t *panel = menu->items[i];
+			if ( panel->window.name && !Q_stricmp( panel->window.name, "setup_background" ) &&
+				 panel->window.rectClient.y + panel->window.rectClient.h < driverY + barHeight + 4 )
+				panel->window.rectClient.h = driverY + barHeight + 4 - panel->window.rectClient.y;
+		}
+	}
+#ifdef JK2_MODE
+	if ( glow )
+		glow->window.rectClient.y = driverY;
+#else
+	driverButton->mouseEnter = String_Alloc( va( "\"show\" \"%s\" \"setitemrect\" \"%s\" \"%.0f\" \"%.0f\" \"%.0f\" \"%.0f\" ", bar, bar, x, driverY, w, barHeight + 2 ) );
+#endif
+	Com_Printf( "More Video: %d rows (%d shown at once), the driver info at %.0f\n", numRows, visible, driverY );
 }
 
 /*
@@ -1152,6 +1732,12 @@ qboolean MenuParse_itemDef( itemDef_t *item )
 		newItem->parent = menu->items[menu->itemCount]->parent = menu;
 		menu->itemCount++;
 		Item_ApplyHacks( newItem );
+
+		if ( newItem->type == ITEM_TYPE_BUTTON && newItem->window.name && !Q_stricmp( newItem->window.name, "advancedvideo" ) &&
+			 newItem->window.group && !Q_stricmp( newItem->window.group, "video2" ) )
+		{
+			Menu_AddEffectRows( menu, newItem );
+		}
 	}
 	else
 	{
@@ -6064,6 +6650,16 @@ void Menu_Paint(menuDef_t *menu, qboolean forcePaint)
 		color[2] = menu->window.backColor[2];
 		color[3] = menu->window.backColor[3];
 
+		// on a wide screen the sides, which the menu's own pictures may not cover, are not left as they were last frame
+		// (the cursor can go there)
+		if (DC->margin > 0)
+		{
+			const vec4_t	black = { 0, 0, 0, 1 };
+
+			DC->fillRect( -DC->margin, 0, DC->margin, SCREEN_HEIGHT, black );
+			DC->fillRect( SCREEN_WIDTH, 0, DC->margin, SCREEN_HEIGHT, black );
+		}
+
 		ui.R_SetColor( color);
 
 		if (menu->window.background==0)	// No background shader given? Make it blank
@@ -6081,6 +6677,8 @@ void Menu_Paint(menuDef_t *menu, qboolean forcePaint)
 
 	// paint the background and or border
 	Window_Paint(&menu->window, menu->fadeAmount, menu->fadeClamp, menu->fadeCycle );
+
+	RowScroll_Sync( menu );	// (the rows of the More Video page)
 
 	// Loop through all items for the menu and paint them
 	int iSlotsVisible = 0;
@@ -6107,6 +6705,7 @@ void Menu_Paint(menuDef_t *menu, qboolean forcePaint)
 		menu->appearanceTime = DC->realTime + menu->appearanceIncrement;
 		menu->appearanceCnt++;
 	}
+	RowScroll_Paint( menu );
 
 
 	if (uis.debugMode)
@@ -7158,7 +7757,7 @@ void Item_Model_Paint(itemDef_t *item)
 	w = item->window.rect.w-2;
 	h = item->window.rect.h-2;
 
-	refdef.x = x * DC->xscale;
+	refdef.x = x * DC->xscale + DC->bias;
 	refdef.y = y * DC->yscale;
 	refdef.width = w * DC->xscale;
 	refdef.height = h * DC->yscale;
@@ -7301,7 +7900,7 @@ void Item_Model_Paint(itemDef_t *item)
 	w = item->window.rect.w-2;
 	h = item->window.rect.h-2;
 
-	refdef.x = x * DC->xscale;
+	refdef.x = x * DC->xscale + DC->bias;
 	refdef.y = y * DC->yscale;
 	refdef.width = w * DC->xscale;
 	refdef.height = h * DC->yscale;
@@ -9352,6 +9951,11 @@ void Menu_HandleMouseMove(menuDef_t *menu, float x, float y)
 		return;
 	}
 
+	if ( RowScroll_MouseMove( menu, y ) )	// (the thumb of the More Video page's scroll bar dragged)
+	{
+		return;
+	}
+
 	if (itemCapture)
 	{
 		//Item_MouseMove(itemCapture, x, y);
@@ -10019,6 +10623,26 @@ static void Scroll_TextScroll_ThumbFunc(void *p)
 
 /*
 =================
+Menu_WindowContainsPoint
+
+A menu that covers the whole 640 wide area covers the whole screen when that is wider (its background is stretched
+to it), so the sides count as inside it
+=================
+*/
+static qboolean Menu_WindowContainsPoint(const menuDef_t *menu, float x, float y)
+{
+	rectDef_t rect = menu->window.rect;
+
+	if (rect.x <= 0 && rect.x + rect.w >= SCREEN_WIDTH)
+	{
+		rect.x -= DC->margin;
+		rect.w += 2 * DC->margin;
+	}
+	return Rect_ContainsPoint(&rect, x, y);
+}
+
+/*
+=================
 Menu_OverActiveItem
 =================
 */
@@ -10026,7 +10650,7 @@ static qboolean Menu_OverActiveItem(menuDef_t *menu, float x, float y)
 {
 	if (menu && menu->window.flags & (WINDOW_VISIBLE | WINDOW_FORCED))
 	{
-		if (Rect_ContainsPoint(&menu->window.rect, x, y))
+		if (Menu_WindowContainsPoint(menu, x, y))
 		{
 			int i;
 			for (i = 0; i < menu->itemCount; i++)
@@ -11224,9 +11848,15 @@ void Menu_HandleKey(menuDef_t *menu, int key, qboolean down)
 		return;
 	}
 
+	if ( RowScroll_HandleKey( menu, key, down ) )	// (the scroll bar of the More Video page)
+	{
+		inHandler = qfalse;
+		return;
+	}
+
 	//JLFMOUSE  MPMOVED
 		// see if the mouse is within the window bounds and if so is this a mouse click
-	if (down && !(menu->window.flags & WINDOW_POPUP) && !Rect_ContainsPoint(&menu->window.rect, DC->cursorx, DC->cursory))
+	if (down && !(menu->window.flags & WINDOW_POPUP) && !Menu_WindowContainsPoint(menu, DC->cursorx, DC->cursory))
 	{
 		static qboolean inHandleKey = qfalse;
 		if (!inHandleKey && (key == A_MOUSE1 || key == A_MOUSE2 || key == A_MOUSE3))

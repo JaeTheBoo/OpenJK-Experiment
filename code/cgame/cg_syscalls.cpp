@@ -326,6 +326,12 @@ void	cgi_R_AddLightToScene( const vec3_t org, float intensity, float r, float g,
 	Q_syscall( CG_R_ADDLIGHTTOSCENE, org, PASSFLOAT(intensity), PASSFLOAT(r), PASSFLOAT(g), PASSFLOAT(b) );
 }
 
+// a light along a line (a saber's blade, a blaster bolt): with the shader dynamic lights what it lights is lit from the
+// nearest point of the line; otherwise it is a light at the middle, as before
+void	cgi_R_AddLineLightToScene( const vec3_t start, const vec3_t end, float intensity, float r, float g, float b ) {
+	Q_syscall( CG_OPENJK_R_ADDLINELIGHTTOSCENE, start, end, PASSFLOAT(intensity), PASSFLOAT(r), PASSFLOAT(g), PASSFLOAT(b) );
+}
+
 void	cgi_R_RenderScene( const refdef_t *fd ) {
 	Q_syscall( CG_R_RENDERSCENE, fd );
 }
@@ -590,4 +596,9 @@ void *cgi_UI_GetMenuByName( const char *menu )
 void cgi_UI_Menu_Paint( void *menu, qboolean force )
 {
 	Q_syscall( CG_OPENJK_MENU_PAINT, menu, force );
+}
+
+void cgi_R_Set2DAnchor( int anchor )
+{
+	Q_syscall( CG_OPENJK_R_SET2DANCHOR, anchor );
 }
