@@ -32,6 +32,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "../game/g_vehicles.h"
 #include "../game/g_ragdoll.h"
 #include "../game/g_slice.h"
+#include "../game/g_saber_reach.h"
 #include "../Rufl/hstring.h"
 
 #define	LOOK_SWING_SCALE	0.5f
@@ -7209,6 +7210,11 @@ Ghoul2 Insert Start
 		{
 			return;
 		}
+
+		// A saber about to deflect a blaster bolt reaches for it (see g_saber_reach.h). Posed before
+		// the hand and blade positions are read below, so the blade drawn and the blade the game
+		// knows follow the arm.
+		G_SaberReach_UpdateAndPose( cent->gent, cg.time, ent.origin, ent.axis );
 
 		if ( cent->gent && cent->gent->client )
 		{

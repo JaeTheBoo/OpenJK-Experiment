@@ -25,6 +25,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "g_functions.h"
 #include "wp_saber.h"
 #include "g_saber_guard.h"
+#include "g_saber_reach.h"
 #include "bg_local.h"
 #include "../cgame/cg_local.h"
 #include "b_local.h"
@@ -75,17 +76,22 @@ void G_MissileBounceEffect( gentity_t *ent, vec3_t org, vec3_t dir, qboolean hit
 
 void G_MissileReflectEffect( gentity_t *ent, vec3_t org, vec3_t dir )
 {
+	// Shown where the blade meets the bolt when the saber arm reached for it (see g_saber_reach.h).
+	vec3_t effectOrigin;
+	VectorCopy( ent->currentOrigin, effectOrigin );
+	G_SaberReach_DeflectionPoint( ent, effectOrigin );
+
 	//FIXME: have an EV_BOUNCE_MISSILE event that checks the s.weapon and does the appropriate effect
 	switch( ent->s.weapon )
 	{
 	case WP_BOWCASTER:
-		G_PlayEffect( "bowcaster/deflect", ent->currentOrigin, dir );
+		G_PlayEffect( "bowcaster/deflect", effectOrigin, dir );
 		break;
 	case WP_BLASTER:
 	case WP_BRYAR_PISTOL:
 	case WP_BLASTER_PISTOL:
 	default:
-		G_PlayEffect( "blaster/deflect", ent->currentOrigin, dir );
+		G_PlayEffect( "blaster/deflect", effectOrigin, dir );
 		break;
 	}
 }

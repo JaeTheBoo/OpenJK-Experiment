@@ -642,3 +642,26 @@ qboolean G_SaberGuard_DeflectMissile( gentity_t *missile, gentity_t **hitEntity,
 	*hitEntity = player;
 	return qfalse;
 }
+
+/*
+==================
+G_SaberGuard_WillDeflect
+==================
+*/
+qboolean G_SaberGuard_WillDeflect( gentity_t *player, gentity_t *missile )
+{
+	if ( !GuardIsUp( player ) )
+	{
+		return qfalse;
+	}
+	if ( !missile )
+	{
+		return qtrue;
+	}
+	if ( missile->owner == player || !MissileCanBeDeflected( missile )
+		|| !InFront( missile->currentOrigin, player->currentOrigin, player->client->ps.viewangles, SABER_REFLECT_MISSILE_CONE ) )
+	{
+		return qfalse;
+	}
+	return ( player->client->ps.forcePower >= BOLT_DEFLECT_COST[SaberDefenseLevel( player )] ) ? qtrue : qfalse;
+}

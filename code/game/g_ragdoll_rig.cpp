@@ -319,37 +319,51 @@ Reading the current pose
 ==================
 */
 
+static void ReadBoneFrame( CGhoul2Info_v &ghoul2, int modelIndex, const Skeleton &skeleton, int time, int boneIndex,
+						   Transform *modelSpaceFrames, bool *frameIsValid )
+{
+	CGhoul2Info *ghoul2Info = &ghoul2[modelIndex];
+	const char *boneName = skeleton.bones[boneIndex].name;
+	frameIsValid[boneIndex] = false;
+	modelSpaceFrames[boneIndex] = skeleton.bones[boneIndex].basePose;
+
+	// Bolts look for a surface with the requested name before looking for a bone. If this
+	// model has a surface with the same name, a bolt would report the surface instead.
+	if ( gi.G2API_GetSurfaceIndex( ghoul2Info, boneName ) != -1 )
+	{
+		return;
+	}
+
+	const int boltIndex = gi.G2API_AddBolt( ghoul2Info, boneName );
+	if ( boltIndex < 0 )
+	{
+		return;
+	}
+
+	// No angles, origin or scale: the result is the bone's frame in model space.
+	mdxaBone_t boltMatrix;
+	if ( gi.G2API_GetBoltMatrix( ghoul2, modelIndex, boltIndex, &boltMatrix, vec3_origin, vec3_origin, time, NULL, vec3_origin ) )
+	{
+		modelSpaceFrames[boneIndex] = TransformFromBoneMatrix( boltMatrix );
+		frameIsValid[boneIndex] = true;
+	}
+}
+
 void ReadCurrentBoneFrames( CGhoul2Info_v &ghoul2, int modelIndex, const Skeleton &skeleton, int time,
 							Transform *modelSpaceFrames, bool *frameIsValid )
 {
-	CGhoul2Info *ghoul2Info = &ghoul2[modelIndex];
-
 	for ( int boneIndex = 0; boneIndex < skeleton.boneCount; boneIndex++ )
 	{
-		const char *boneName = skeleton.bones[boneIndex].name;
-		frameIsValid[boneIndex] = false;
-		modelSpaceFrames[boneIndex] = skeleton.bones[boneIndex].basePose;
+		ReadBoneFrame( ghoul2, modelIndex, skeleton, time, boneIndex, modelSpaceFrames, frameIsValid );
+	}
+}
 
-		// Bolts look for a surface with the requested name before looking for a bone. If this
-		// model has a surface with the same name, a bolt would report the surface instead.
-		if ( gi.G2API_GetSurfaceIndex( ghoul2Info, boneName ) != -1 )
-		{
-			continue;
-		}
-
-		const int boltIndex = gi.G2API_AddBolt( ghoul2Info, boneName );
-		if ( boltIndex < 0 )
-		{
-			continue;
-		}
-
-		// No angles, origin or scale: the result is the bone's frame in model space.
-		mdxaBone_t boltMatrix;
-		if ( gi.G2API_GetBoltMatrix( ghoul2, modelIndex, boltIndex, &boltMatrix, vec3_origin, vec3_origin, time, NULL, vec3_origin ) )
-		{
-			modelSpaceFrames[boneIndex] = TransformFromBoneMatrix( boltMatrix );
-			frameIsValid[boneIndex] = true;
-		}
+void ReadSomeBoneFrames( CGhoul2Info_v &ghoul2, int modelIndex, const Skeleton &skeleton, int time,
+						 const int *boneIndices, int boneCount, Transform *modelSpaceFrames, bool *frameIsValid )
+{
+	for ( int listIndex = 0; listIndex < boneCount; listIndex++ )
+	{
+		ReadBoneFrame( ghoul2, modelIndex, skeleton, time, boneIndices[listIndex], modelSpaceFrames, frameIsValid );
 	}
 }
 
@@ -720,6 +734,46 @@ void WriteBoneFrames( const Rig &rig, const Transform *boneFrames, CGhoul2Info *
 		// name lookup also stays correct if other game code adds or removes bone list entries.
 		gi.G2API_SetBoneAnglesMatrix( ghoul2Info, skeleton.bones[boneIndex].name, BoneMatrixFromTransform( boneOverride ),
 									  BONE_ANGLES_PREMULT, NULL, 0, time );
+	}
+}
+
+void WriteSomeBoneFrames( const Skeleton &skeleton, const int *boneIndices, int boneCount, const Transform *boneFrames,
+						  CGhoul2Info *ghoul2Info, int time )
+{
+	// As in WriteBoneFrames: override = inverse(parentFinal) * final, final = frame * inverse(rest pose).
+	// The root bone is never one of the listed bones.
+	for ( int listIndex = 0; listIndex < boneCount; listIndex++ )
+	{
+		const int boneIndex = boneIndices[listIndex];
+		const int parentIndex = skeleton.bones[boneIndex].parentIndex;
+		if ( parentIndex < 0 )
+		{
+			continue;
+		}
+		const Transform finalMatrix = Compose( boneFrames[boneIndex], Inverse( skeleton.bones[boneIndex].basePose ) );
+		const Transform parentFinal = Compose( boneFrames[parentIndex], Inverse( skeleton.bones[parentIndex].basePose ) );
+		const Transform boneOverride = Compose( Inverse( parentFinal ), finalMatrix );
+		gi.G2API_SetBoneAnglesMatrix( ghoul2Info, skeleton.bones[boneIndex].name, BoneMatrixFromTransform( boneOverride ),
+									  BONE_ANGLES_PREMULT, NULL, 0, time );
+	}
+}
+
+void ClearSomeBoneOverrides( const Skeleton &skeleton, const int *boneIndices, int boneCount, CGhoul2Info *ghoul2Info )
+{
+	for ( int listIndex = 0; listIndex < boneCount; listIndex++ )
+	{
+		const int boneListIndex = gi.G2API_GetBoneIndex( ghoul2Info, skeleton.bones[boneIndices[listIndex]].name, qfalse );
+		if ( boneListIndex < 0 || boneListIndex >= (int)ghoul2Info->mBlist.size() )
+		{
+			continue;
+		}
+		// A bone Ghoul2's own ragdoll (Jedi Academy's G_RagDoll) or inverse kinematics has taken over is
+		// left to it: stopping its angles would undo that.
+		if ( ghoul2Info->mBlist[boneListIndex].flags & ( BONE_ANGLES_RAGDOLL | BONE_ANGLES_IK ) )
+		{
+			continue;
+		}
+		gi.G2API_StopBoneAnglesIndex( ghoul2Info, boneListIndex );
 	}
 }
 

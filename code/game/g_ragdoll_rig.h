@@ -160,6 +160,18 @@ void ClearBoneOverrides( const Rig &rig, CGhoul2Info *ghoul2Info );
 // The same for a model that has no rig (for example one restored from a saved game).
 void ClearSkeletonBoneOverrides( const Skeleton &skeleton, CGhoul2Info *ghoul2Info );
 
+// The same three calls for only some of the bones, for code that poses part of a living character
+// (the saber arm reaching for a blaster bolt, see g_saber_reach.h) and leaves the rest animated.
+//   ReadSomeBoneFrames     reads the listed bones' current frames into modelSpaceFrames[boneIndex]
+//   WriteSomeBoneFrames    draws the listed bones at boneFrames[boneIndex]; the parent of every listed
+//                          bone must hold its current frame in boneFrames (read, or listed itself)
+//   ClearSomeBoneOverrides removes the listed bones' overrides
+void ReadSomeBoneFrames( CGhoul2Info_v &ghoul2, int modelIndex, const Skeleton &skeleton, int time,
+						 const int *boneIndices, int boneCount, Transform *modelSpaceFrames, bool *frameIsValid );
+void WriteSomeBoneFrames( const Skeleton &skeleton, const int *boneIndices, int boneCount, const Transform *boneFrames,
+						  CGhoul2Info *ghoul2Info, int time );
+void ClearSomeBoneOverrides( const Skeleton &skeleton, const int *boneIndices, int boneCount, CGhoul2Info *ghoul2Info );
+
 // Debugging aid: reads back where the engine now draws every bone and prints the bones that are
 // furthest from where WriteBoneOverrides asked them to be (position in units, angle in degrees).
 void PrintBoneOverrideErrors( const Rig &rig, const Transform *bodyTransforms, const Transform &modelToWorld,

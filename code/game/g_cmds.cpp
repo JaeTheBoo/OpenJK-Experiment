@@ -29,6 +29,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "../cgame/cg_local.h"
 #include "b_local.h"
 #include "g_slice.h"
+#include "g_saber_reach.h"
 
 extern	bool		in_camera;
 extern stringID_table_t SaberStyleTable[];
@@ -1401,6 +1402,14 @@ void ClientCommand( int clientNum ) {
 		if ( CheatsOk( ent ) )
 		{
 			G_Slice_Command( ent, gi.argv( 1 ) );
+		}
+	}
+	else if (Q_stricmp (cmd, "reachbolt") == 0)
+	{
+		// Fires a test bolt at the character under the crosshair (see g_saber_reach.h).
+		if ( CheatsOk( ent ) )
+		{
+			G_SaberReach_Command( ent );
 		}
 	}
 	else if (Q_stricmp (cmd, "kill") == 0)

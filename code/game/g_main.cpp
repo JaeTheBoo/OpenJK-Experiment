@@ -33,6 +33,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "bg_pmove_momentum.h"
 #include "g_ragdoll.h"
 #include "g_saber_guard.h"
+#include "g_saber_reach.h"
 #include "g_slice.h"
 #include "../cgame/cg_local.h"	// yeah I know this is naughty, but we're shipping soon...
 
@@ -715,6 +716,7 @@ void G_InitCvars( void ) {
 
 	G_Ragdoll_RegisterCvars();	// active ragdolls, see g_ragdoll.h
 	G_SaberGuard_RegisterCvars();	// the player's lightsaber guard, see g_saber_guard.h
+	G_SaberReach_RegisterCvars();	// the saber arm reaching for bolts it deflects, see g_saber_reach.h
 }
 /*
 ============
@@ -751,6 +753,7 @@ void InitGame(  const char *mapname, const char *spawntarget, int checkSum, cons
 	G_InitMemory();
 
 	G_Ragdoll_Reset();	// no ragdoll survives a level change or a loaded game
+	G_SaberReach_Reset();
 
 	// set some level globals
 	memset( &level, 0, sizeof( level ) );
@@ -836,6 +839,7 @@ ShutdownGame
 void ShutdownGame( void )
 {
 	G_Ragdoll_Reset();
+	G_SaberReach_Reset();
 
 	// write all the client session data so we can get it back
 	G_WriteSessionData();

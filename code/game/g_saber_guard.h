@@ -113,4 +113,10 @@ qboolean G_SaberGuard_Parried( const gentity_t *defender, const gentity_t *attac
 // player) and the impact carries on as usual.
 qboolean G_SaberGuard_DeflectMissile( gentity_t *missile, gentity_t **hitEntity, trace_t *trace );
 
+// True if the player's guard would deflect this missile were it to strike now: the guard is up, the
+// missile is one a guard deflects, it comes from in front and the player has the Force to pay for it.
+// With missile NULL, whether the guard is up at all. Changes nothing: the saber arm's reach for an
+// incoming bolt asks it (see g_saber_reach.h).
+qboolean G_SaberGuard_WillDeflect( gentity_t *player, gentity_t *missile );
+
 #endif // G_SABER_GUARD_H
