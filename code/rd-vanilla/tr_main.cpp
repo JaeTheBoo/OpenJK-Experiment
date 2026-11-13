@@ -1303,6 +1303,15 @@ void R_AddDynamicMeshSurfaces( trRefEntity_t *ent ) {
 			shader = R_FindShader( shader->name, lightmapsNone, stylesDefault, qtrue );
 		}
 		R_AddDrawSurf( (surfaceType_t *)surface, shader, fogNum, qfalse );
+
+		// it casts a shadow as a character's Ghoul2 surface would (R_AddGhoulSurfaces); the shadow code welds
+		// the triangles' separate corners by position, so the batch is drawn into it as it is
+		if ( R_MODEL_SHADOWS( r_shadows->integer )
+			&& ( ent->e.renderfx & RF_SHADOW_PLANE )
+			&& !( ent->e.renderfx & ( RF_NOSHADOW | RF_DEPTHHACK ) )
+			&& shader->sort == SS_OPAQUE ) {
+			R_AddDrawSurf( (surfaceType_t *)surface, tr.shadowShader, 0, qfalse );
+		}
 	}
 }
 

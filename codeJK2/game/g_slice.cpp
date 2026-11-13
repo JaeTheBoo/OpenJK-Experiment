@@ -1883,7 +1883,7 @@ void G_Slice_AddMaimedCharacter( gentity_t *entity, const vec3_t drawnOrigin, ve
 	meshEntity.axis[2][2] = 1.0f;
 	VectorCopy( drawnOrigin, meshEntity.origin );
 	VectorCopy( lightingOrigin, meshEntity.lightingOrigin );
-	meshEntity.renderfx = RF_LIGHTING_ORIGIN;
+	meshEntity.renderfx = RF_LIGHTING_ORIGIN | RF_SHADOW_PLANE;	// (shadows as a character's, when they are on)
 	meshEntity.radius = sqrtf( largestDistanceSquared );
 	meshEntity.shaderRGBA[0] = meshEntity.shaderRGBA[1] = meshEntity.shaderRGBA[2] = meshEntity.shaderRGBA[3] = 255;
 	cgi_R_AddRefEntityToScene( &meshEntity );
@@ -2339,7 +2339,7 @@ void G_Slice_AddPiecesToScene( int renderTime )
 		entity.axis[2][2] = 1.0f;
 		meshOrigin.CopyToArray( entity.origin );
 		meshOrigin.CopyToArray( entity.lightingOrigin );
-		entity.renderfx = RF_LIGHTING_ORIGIN;
+		entity.renderfx = RF_LIGHTING_ORIGIN | RF_SHADOW_PLANE;	// (shadows as a character's, when they are on)
 		entity.radius = meshRadius;
 		entity.shaderRGBA[0] = entity.shaderRGBA[1] = entity.shaderRGBA[2] = entity.shaderRGBA[3] = 255;
 		cgi_R_AddRefEntityToScene( &entity );

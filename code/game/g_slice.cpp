@@ -2052,7 +2052,7 @@ void G_Slice_AddMaimedCharacter( gentity_t *entity, const refEntity_t &drawnMode
 	meshEntity.axis[2][2] = 1.0f;
 	VectorCopy( drawnOrigin, meshEntity.origin );
 	VectorCopy( lightingOrigin, meshEntity.lightingOrigin );
-	meshEntity.renderfx = RF_LIGHTING_ORIGIN;
+	meshEntity.renderfx = RF_LIGHTING_ORIGIN | RF_SHADOW_PLANE;	// (shadows as a character's, when they are on)
 	meshEntity.radius = sqrtf( largestDistanceSquared );
 	for ( int channel = 0; channel < 4; channel++ )
 	{
@@ -2561,7 +2561,7 @@ void G_Slice_AddPiecesToScene( int renderTime )
 		entity.axis[2][2] = 1.0f;
 		meshOrigin.CopyToArray( entity.origin );
 		meshOrigin.CopyToArray( entity.lightingOrigin );
-		entity.renderfx = RF_LIGHTING_ORIGIN;
+		entity.renderfx = RF_LIGHTING_ORIGIN | RF_SHADOW_PLANE;	// (shadows as a character's, when they are on)
 		entity.radius = meshRadius;
 		for ( int channel = 0; channel < 4; channel++ )
 		{
