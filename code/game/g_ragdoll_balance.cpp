@@ -94,7 +94,7 @@ static BalanceState balanceStates[MAX_GENTITIES];
 
 void RegisterBalanceCvars( void )
 {
-	g_ragdollStumbles	= gi.cvar( "g_ragdollStumbles", "1", CVAR_ARCHIVE );
+	g_ragdollStumbles	= gi.cvar( "g_ragdollStumbles", "0", CVAR_ARCHIVE );
 	// 1300: a single blaster shot is only a flinch, two quick ones or a burst make a character stagger,
 	// and it takes sustained fire to push one over, so staggering characters often recover and fight on.
 	g_ragdollBalance	= gi.cvar( "g_ragdollBalance", "1300", CVAR_ARCHIVE );

@@ -517,14 +517,14 @@ Console variables and lifetime
 void G_Ragdoll_RegisterCvars( void )
 {
 	g_ragdoll				= gi.cvar( "g_ragdoll", "1", CVAR_ARCHIVE );
-	g_ragdollMuscleStrength	= gi.cvar( "g_ragdollMuscleStrength", "1.0", CVAR_ARCHIVE );
+	g_ragdollMuscleStrength	= gi.cvar( "g_ragdollMuscleStrength", "0", CVAR_ARCHIVE );
 	g_ragdollImpulseScale	= gi.cvar( "g_ragdollImpulseScale", "1.0", CVAR_ARCHIVE );
-	g_ragdollWritheChance	= gi.cvar( "g_ragdollWritheChance", "0.5", CVAR_ARCHIVE );
+	g_ragdollWritheChance	= gi.cvar( "g_ragdollWritheChance", "0", CVAR_ARCHIVE );
 	g_ragdollDebug			= gi.cvar( "g_ragdollDebug", "0", 0 );
 	g_ragdollKnockdowns		= gi.cvar( "g_ragdollKnockdowns", "1", CVAR_ARCHIVE );
-	g_ragdollHitReactions	= gi.cvar( "g_ragdollHitReactions", "1", CVAR_ARCHIVE );
+	g_ragdollHitReactions	= gi.cvar( "g_ragdollHitReactions", "0", CVAR_ARCHIVE );
 	g_ragdollHitReactionScale = gi.cvar( "g_ragdollHitReactionScale", "0.4", CVAR_ARCHIVE );
-	g_ragdollShotReactions	= gi.cvar( "g_ragdollShotReactions", "1", CVAR_ARCHIVE );
+	g_ragdollShotReactions	= gi.cvar( "g_ragdollShotReactions", "0", CVAR_ARCHIVE );
 	ragdoll::RegisterBalanceCvars();	// g_ragdollStumbles, g_ragdollBalance
 	G_Slice_RegisterCvars();			// g_saberSlicing
 }
