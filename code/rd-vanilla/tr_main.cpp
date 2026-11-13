@@ -611,7 +611,10 @@ void R_SetupFrustum (void) {
 		if (i==4)
 		{
 			// far plane does not go through the view point, it goes alot farther..
-			tr.viewParms.frustum[i].dist -= tr.distanceCull*1.02f; // a little slack so we don't cull stuff
+			// (a scene without the world, like a model in a menu, has no level's cull distance, which is 0 before the
+			// first level: as far as such a scene's far clip, R_SetFarClip)
+			const float distanceCull = ( tr.refdef.rdflags & RDF_NOWORLDMODEL ) ? 2048.0f : tr.distanceCull;
+			tr.viewParms.frustum[i].dist -= distanceCull*1.02f; // a little slack so we don't cull stuff
 		}
 		SetPlaneSignbits( &tr.viewParms.frustum[i] );
 	}

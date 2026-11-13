@@ -1086,6 +1086,16 @@ static void Item_ApplyHacks( itemDef_t *item ) {
 	}
 #endif
 
+#ifndef JK2_MODE
+	// Jedi Outcast's controls bind its own names of the quick save (save quik*) and load: this game's instead
+	if ( item->type == ITEM_TYPE_BIND && item->cvar && UI_OutcastStyle() ) {
+		if ( !Q_stricmp( item->cvar, "save quik*" ) )
+			item->cvar = String_Alloc( "save quick" );
+		else if ( !Q_stricmp( item->cvar, "load quik" ) )
+			item->cvar = String_Alloc( "load quick" );
+	}
+#endif
+
 	if ( item->type == ITEM_TYPE_MULTI && item->window.name && !Q_stricmp( item->window.name, "sound_quality") ) {
 		multiDef_t *multiPtr = (multiDef_t *)item->typeData;
 		int i;
@@ -1231,9 +1241,8 @@ static void Item_ApplyHacks( itemDef_t *item ) {
 		// (Jedi Academy). Offer the levels the graphics card supports instead.
 		multiDef_t *multiPtr;
 
-#ifdef JK2_MODE
-		item->cvarFlags = CVAR_DISABLE;	// (greyed out rather than hidden when the card can't do it)
-#endif
+		if ( UI_OutcastStyle() )
+			item->cvarFlags = CVAR_DISABLE;	// (greyed out rather than hidden when the card can't do it)
 		if ( item->type != ITEM_TYPE_MULTI )
 		{
 			item->type = ITEM_TYPE_MULTI;
@@ -1302,12 +1311,13 @@ static void Item_ApplyHacks( itemDef_t *item ) {
 		item->cvar = String_Alloc( "ui_r_ext_multisample" );
 		item->text = (char *)String_Alloc( "Anti-Aliasing:" );
 		item->descText = String_Alloc( "Smooths the jagged edges of everything. Higher is smoother and slower. Needs Apply Changes." );
-#ifndef JK2_MODE
-		// the rows of Jedi Academy are 14 apart and the one for video sync is the last, put this one below it
-		item->window.rectClient.y = 342;
-		item->mouseEnter = String_Alloc( "\"show\" \"button_glow\" \"setitemrect\" \"button_glow\" \"260\" \"342\" \"340\" \"20\" " );
-		item->mouseExit = String_Alloc( "\"hide\" \"button_glow\" " );
-#endif
+		if ( !UI_OutcastStyle() )
+		{
+			// the rows of Jedi Academy are 14 apart and the one for video sync is the last, put this one below it
+			item->window.rectClient.y = 342;
+			item->mouseEnter = String_Alloc( "\"show\" \"button_glow\" \"setitemrect\" \"button_glow\" \"260\" \"342\" \"340\" \"20\" " );
+			item->mouseExit = String_Alloc( "\"hide\" \"button_glow\" " );
+		}
 		Com_Printf( "Turned the compressed textures field into an antialiasing field.\n" );
 	}
 }
@@ -1642,14 +1652,14 @@ static void Menu_AddEffectRows( menuDef_t *menu, itemDef_t *driverButton )
 		return;
 
 	// The rows, from the top: the slider for the brightness, then every row, then the driver info
-#ifdef JK2_MODE
-	const float x = 305, w = 300, brightnessY = 244, firstY = 264, pitch = 15, barHeight = 17, panelGrows = 0;
-	const char *bar = "highlight10";	// the one bar for all the rows, put where the row is
-#else
-	// (there is no room above the rows, so the panel they are on is made taller instead, as far as they need)
-	const float x = 260, w = 340, brightnessY = 0, firstY = 287, pitch = 13, barHeight = 14, panelGrows = 1;
-	const char *bar = "button_glow";
-#endif
+	// Jedi Outcast's menus, then Jedi Academy's
+	// (there is no room above the rows of Jedi Academy's, so the panel they are on is made taller instead, as far
+	// as they need)
+	const qboolean outcast = UI_OutcastStyle();
+	const float x = outcast ? 305 : 260, w = outcast ? 300 : 340, brightnessY = outcast ? 244 : 0;
+	const float firstY = outcast ? 264 : 287, pitch = outcast ? 15 : 13, barHeight = outcast ? 17 : 14;
+	const qboolean panelGrows = outcast ? qfalse : qtrue;
+	const char *bar = outcast ? "highlight10" : "button_glow";	// (Jedi Outcast's: the one bar for all the rows, put where the row is)
 	if ( brightnessY > 0 )
 		brightness->window.rectClient.y = brightnessY;
 
@@ -1679,11 +1689,7 @@ static void Menu_AddEffectRows( menuDef_t *menu, itemDef_t *driverButton )
 	rowScroll.left = x;
 	rowScroll.firstY = firstY;
 	rowScroll.pitch = pitch;
-#ifdef JK2_MODE
-	rowScroll.barX = x + w + 2;
-#else
-	rowScroll.barX = x + w - ROW_SCROLL_BAR - 4;	// (inside the panel)
-#endif
+	rowScroll.barX = outcast ? x + w + 2 : x + w - ROW_SCROLL_BAR - 4;	// (Jedi Academy's: inside the panel)
 	RowScroll_Place( rowScroll );
 	if ( numRows > visible )
 	{
@@ -1703,12 +1709,13 @@ static void Menu_AddEffectRows( menuDef_t *menu, itemDef_t *driverButton )
 				panel->window.rectClient.h = driverY + barHeight + 4 - panel->window.rectClient.y;
 		}
 	}
-#ifdef JK2_MODE
-	if ( glow )
-		glow->window.rectClient.y = driverY;
-#else
-	driverButton->mouseEnter = String_Alloc( va( "\"show\" \"%s\" \"setitemrect\" \"%s\" \"%.0f\" \"%.0f\" \"%.0f\" \"%.0f\" ", bar, bar, x, driverY, w, barHeight + 2 ) );
-#endif
+	if ( outcast )
+	{
+		if ( glow )
+			glow->window.rectClient.y = driverY;
+	}
+	else
+		driverButton->mouseEnter = String_Alloc( va( "\"show\" \"%s\" \"setitemrect\" \"%s\" \"%.0f\" \"%.0f\" \"%.0f\" \"%.0f\" ", bar, bar, x, driverY, w, barHeight + 2 ) );
 	Com_Printf( "More Video: %d rows (%d shown at once), the driver info at %.0f\n", numRows, visible, driverY );
 }
 
@@ -7747,7 +7754,11 @@ void Item_Model_Paint(itemDef_t *item)
 	}
 
 	// Fuck all the logic --eez
-#ifdef JK2_MODE
+	// (Jedi Outcast's menus: its own way, which ignores the angle and turning speed its menus give)
+#ifndef JK2_MODE
+	if ( UI_OutcastStyle() )
+#endif
+	{
 	// setup the refdef
 	memset( &refdef, 0, sizeof( refdef ) );
 	refdef.rdflags = RDF_NOWORLDMODEL;
@@ -7828,7 +7839,9 @@ void Item_Model_Paint(itemDef_t *item)
 
 	DC->addRefEntityToScene( &ent );
 	DC->renderScene( &refdef );
-#else
+	return;
+	}
+#ifndef JK2_MODE
 	// a moves datapad anim is playing
 	if (uiInfo.moveAnimTime && (uiInfo.moveAnimTime < uiInfo.uiDC.realTime))
 	{

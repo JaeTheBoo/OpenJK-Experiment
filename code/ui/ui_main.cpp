@@ -388,6 +388,7 @@ typedef struct cvarTable_s {
 } cvarTable_t;
 
 vmCvar_t	ui_menuFiles;
+vmCvar_t	ui_style;
 vmCvar_t	ui_hudFiles;
 
 vmCvar_t	ui_char_anim;
@@ -442,6 +443,7 @@ static void UI_UpdateScreenshot( void )
 static cvarTable_t cvarTable[] =
 {
 	{ &ui_menuFiles,			"ui_menuFiles",			"ui/menus.txt", NULL, CVAR_ARCHIVE },
+	{ &ui_style,				"ui_style",				"academy", NULL, CVAR_ARCHIVE },	// academy|outcast: whose menus, see UI_OutcastStyle
 #ifdef JK2_MODE
 	{ &ui_hudFiles,				"cg_hudFiles",			"ui/jk2hud.txt", NULL, CVAR_ARCHIVE},
 #else
@@ -887,6 +889,27 @@ static qboolean UI_DeferMenuScript ( const char **args )
 	return qfalse;
 }
 
+/*
+===============
+UI_OutcastStyle
+
+Jedi Outcast's menus instead of Jedi Academy's (ui_style "outcast", read when the menus are loaded:
+change it, then vid_restart). Jedi Outcast's own engine has only those.
+===============
+*/
+#ifndef JK2_MODE
+static qboolean ui_outcastStyle;
+#endif
+
+qboolean UI_OutcastStyle( void )
+{
+#ifdef JK2_MODE
+	return qtrue;
+#else
+	return ui_outcastStyle;
+#endif
+}
+
 #ifndef JK2_MODE
 /*
 ===============
@@ -917,7 +940,7 @@ static qboolean UI_IsOutcastCampaign( void )
 // Loads the menu that asks which story to play (only when there is a choice)
 static void UI_LoadOutcastCampaignMenu( void )
 {
-	if ( UI_OutcastDataAvailable() )
+	if ( UI_OutcastDataAvailable() && !UI_OutcastStyle() )	// (in Jedi Academy's style)
 	{
 		UI_ParseMenu( "ui/campaign.menu" );
 	}
@@ -1167,7 +1190,12 @@ static qboolean UI_RunMenuScript ( const char **args )
 #ifdef JK2_MODE
 			ui.Cmd_ExecuteText( EXEC_APPEND, "map kejim_post\n" );
 #else
-			if ( UI_IsOutcastCampaign() )
+			if ( UI_OutcastStyle() )
+			{//Jedi Outcast's New Game (its menus ask only for the difficulty): its story
+				Cvar_Set( "g_campaign", "outcast" );
+				UI_StartOutcastCampaign();
+			}
+			else if ( UI_IsOutcastCampaign() )
 			{
 				UI_StartOutcastCampaign();
 			}
@@ -1909,6 +1937,11 @@ static void UI_HandleLoadSelection()
 	if (!ui.SG_GetSaveImage(s_savedata[s_savegame.currentLine].currentSaveFileName, &screenShotBuf))
 	{
 		memset( screenShotBuf,0,(SG_SCR_WIDTH * SG_SCR_HEIGHT * 4));
+	}
+#else
+	if ( UI_OutcastStyle() )
+	{//Jedi Outcast's load and save menus show the comment of the chosen game in a field of its own
+		Cvar_Set("ui_gameDesc", s_savedata[s_savegame.currentLine].currentSaveFileComments );
 	}
 #endif
 }
@@ -2760,6 +2793,16 @@ void _UI_Init( qboolean inGameLoad )
 
 	UI_RegisterCvars();
 
+#ifndef JK2_MODE
+	// whose menus: Jedi Outcast's need its game data, and its copies of the files both games have
+	// (the menu sets and art of both have the same names) are read instead of Jedi Academy's
+	ui_outcastStyle = FS_SetOutcastInterface( !Q_stricmp( ui_style.string, "outcast" ) ? qtrue : qfalse );
+#endif
+
+	// The fonts the menus number are the ones they register, in their order: start that list again (after
+	// vid_restart the renderer's fonts are new, and the menus may be the other game's, with other fonts)
+	registeredFontsCount = 0;
+
 	UI_InitMemory();
 
 	// cache redundant calulations
@@ -2850,7 +2893,7 @@ void _UI_Init( qboolean inGameLoad )
 	}
 
 #ifndef JK2_MODE
-	if (inGameLoad)
+	if (inGameLoad && !UI_OutcastStyle())	// (Jedi Outcast's in-game menus are in its one set)
 	{
 		UI_LoadMenus("ui/ingame.txt", qtrue);
 	}
@@ -3134,7 +3177,7 @@ void UI_Load(void)
 	}
 
 #ifndef JK2_MODE
-	if (uiInfo.inGameLoad)
+	if (uiInfo.inGameLoad && !UI_OutcastStyle())
 	{
 		menuSet= "ui/ingame.txt";
 	}

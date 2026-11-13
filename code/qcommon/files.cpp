@@ -1252,6 +1252,10 @@ separate file or a ZIP file.
 */
 extern qboolean		com_fullyInitialized;
 
+#ifndef JK2_MODE
+static long FS_FOpenOutcastInterfaceFile( const char *filename, fileHandle_t *file, qboolean uniqueFILE );
+#endif
+
 long FS_FOpenFileRead( const char *filename, fileHandle_t *file, qboolean uniqueFILE ) {
 	searchpath_t	*search;
 	char			*netpath;
@@ -1294,6 +1298,16 @@ long FS_FOpenFileRead( const char *filename, fileHandle_t *file, qboolean unique
 		*file = 0;
 		return -1;
 	}
+
+#ifndef JK2_MODE
+	// Jedi Outcast's interface: its own copies of the menus, their art and sounds win
+	{
+		const long outcastLength = FS_FOpenOutcastInterfaceFile( filename, file, uniqueFILE );
+		if ( *file ) {
+			return outcastLength;
+		}
+	}
+#endif
 
 	isUserConfig = !Q_stricmp( filename, "autoexec_sp.cfg" ) || !Q_stricmp( filename, Q3CONFIG_NAME );
 
@@ -1907,6 +1921,53 @@ long FS_ReadOutcastFile( const char *qpath, void **buffer ) {
 	const long length = FS_ReadFile( qpath, buffer );
 	FS_EndOutcastOnly();
 	return length;
+}
+
+#ifndef JK2_MODE
+static qboolean	fs_outcastInterface;	// Jedi Outcast's interface is on, see FS_SetOutcastInterface
+
+// The folders of what the interface is made of, that both games have files of the same names in:
+// the menus, their pictures, and the sounds of the buttons
+static qboolean FS_IsOutcastInterfaceFile( const char *filename ) {
+	static const char *const folders[] = { "ui/", "menu/", "gfx/menus/", "sound/interface/" };
+
+	for ( size_t i = 0; i < ARRAY_LEN( folders ); i++ ) {
+		if ( !Q_stricmpn( filename, folders[i], (int)strlen( folders[i] ) ) ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+// FS_FOpenFileRead's first look, while Jedi Outcast's interface is on: an interface file from Jedi
+// Outcast's game data, when it has one (*file is 0 when not)
+static long FS_FOpenOutcastInterfaceFile( const char *filename, fileHandle_t *file, qboolean uniqueFILE ) {
+	*file = 0;
+	if ( !fs_outcastInterface || fs_allSearchPaths || !FS_IsOutcastInterfaceFile( filename ) || !FS_BeginOutcastOnly() ) {
+		return -1;
+	}
+	const long length = FS_FOpenFileRead( filename, file, uniqueFILE );
+	FS_EndOutcastOnly();
+	return length;
+}
+#endif
+
+/*
+=============
+FS_SetOutcastInterface
+
+Jedi Outcast's interface (the menus, ui_style "outcast") is made of files with the same names as Jedi
+Academy's. While it is on, Jedi Outcast's copies of those are read instead, where it has them. Only
+with Jedi Outcast's game data mounted; returns whether it is on.
+=============
+*/
+qboolean FS_SetOutcastInterface( qboolean on ) {
+#ifdef JK2_MODE
+	return qfalse;
+#else
+	fs_outcastInterface = ( on && fs_outcastpath && fs_outcastpath->string[0] ) ? qtrue : qfalse;
+	return fs_outcastInterface;
+#endif
 }
 
 /*

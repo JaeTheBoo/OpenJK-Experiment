@@ -507,6 +507,7 @@ void		String_Init(void);
 qboolean	String_Parse(const char **p, const char **out);
 void		String_Report(void);
 void		UI_Cursor_Show(qboolean flag);
+qboolean	UI_OutcastStyle(void);	// Jedi Outcast's menus are loaded (ui_main.cpp)
 itemDef_t *Menu_GetMatchingItemByNumber(menuDef_t *menu, int index, const char *name);
 
 extern displayContextDef_t *DC;
