@@ -3025,6 +3025,15 @@ void CG_LoadHudMenu(void)
 	}
 
 	CG_LoadMenus(hudSet);
+
+	if ( G_OutcastInterface() )
+	{	// Jedi Outcast has none of Jedi Academy's vehicles, so its HUD has nothing to show them with: riding
+		// one shows Jedi Academy's HUD for it (CG_DrawVehicleHud, CG_DrawTauntaunHud), from Jedi Academy's
+		// own data, when the HUD set has none. (The emplaced gun, the AT-ST and the panel turrets have Jedi
+		// Outcast's own, CG_DrawOutcastCustomHud.)
+		cgi_UI_LoadAcademyMenu( "ui/hud.menu", "swoopvehiclehud" );
+		cgi_UI_LoadAcademyMenu( "ui/hud.menu", "tauntaunhud" );
+	}
 }
 
 

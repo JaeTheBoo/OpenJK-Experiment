@@ -488,6 +488,7 @@ itemDef_t *Menu_GetMatchingItemByNumber(menuDef_t *menu, int index, const char *
 
 void		Menu_HandleKey(menuDef_t *menu, int key, qboolean down);
 void		Menu_New(char *buffer);
+qboolean	Menus_LoadAcademyMenu( const char *menuFile, const char *menuName );
 void		Menus_OpenByName(const char *p);
 void		Menu_PaintAll(void);
 void		Menu_Reset(void);

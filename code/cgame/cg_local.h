@@ -1243,6 +1243,7 @@ int		cgi_UI_GetMenuItemInfo(const char *menuFile,const char *itemName,int *x,int
 int		cgi_UI_GetMenuInfo(char *menuFile,int *x,int *y,int *w,int *h);
 void	cgi_UI_Menu_Paint( void *menu, qboolean force );
 void	*cgi_UI_GetMenuByName( const char *menu );
+qboolean cgi_UI_LoadAcademyMenu( const char *menuFile, const char *menuName );
 
 
 void	SetWeaponSelectTime(void);

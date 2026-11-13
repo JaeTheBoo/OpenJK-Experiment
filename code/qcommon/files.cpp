@@ -1939,6 +1939,7 @@ long FS_ReadOutcastFile( const char *qpath, void **buffer ) {
 
 #ifndef JK2_MODE
 static qboolean	fs_outcastInterface;	// Jedi Outcast's interface is on, see FS_SetOutcastInterface
+static qboolean	fs_academyInterface;	// but Jedi Academy's own files are read for now, see FS_BeginAcademyInterface
 
 // The folders of what the interface is made of, that both games have files of the same names in:
 // the menus, their pictures, the HUD's pictures, and the sounds of the buttons
@@ -1957,7 +1958,7 @@ static qboolean FS_IsOutcastInterfaceFile( const char *filename ) {
 // Outcast's game data, when it has one (*file is 0 when not)
 static long FS_FOpenOutcastInterfaceFile( const char *filename, fileHandle_t *file, qboolean uniqueFILE ) {
 	*file = 0;
-	if ( !fs_outcastInterface || fs_allSearchPaths || !FS_IsOutcastInterfaceFile( filename ) || !FS_BeginOutcastOnly() ) {
+	if ( !fs_outcastInterface || fs_academyInterface || fs_allSearchPaths || !FS_IsOutcastInterfaceFile( filename ) || !FS_BeginOutcastOnly() ) {
 		return -1;
 	}
 	const long length = FS_FOpenFileRead( filename, file, uniqueFILE );
@@ -1981,6 +1982,27 @@ qboolean FS_SetOutcastInterface( qboolean on ) {
 #else
 	fs_outcastInterface = ( on && fs_outcastpath && fs_outcastpath->string[0] ) ? qtrue : qfalse;
 	return fs_outcastInterface;
+#endif
+}
+
+/*
+=============
+FS_BeginAcademyInterface / FS_EndAcademyInterface
+
+Between these, the interface's files are read as Jedi Academy's interface reads them (its own copies,
+not Jedi Outcast's), even while Jedi Outcast's is on. For the parts of Jedi Academy's interface that
+Jedi Outcast's has nothing in place of: the HUDs of Jedi Academy's vehicles (Menus_LoadAcademyMenu).
+=============
+*/
+void FS_BeginAcademyInterface( void ) {
+#ifndef JK2_MODE
+	fs_academyInterface = qtrue;
+#endif
+}
+
+void FS_EndAcademyInterface( void ) {
+#ifndef JK2_MODE
+	fs_academyInterface = qfalse;
 #endif
 }
 

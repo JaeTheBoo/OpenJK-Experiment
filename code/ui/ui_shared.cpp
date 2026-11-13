@@ -6544,6 +6544,109 @@ void Menu_New(char *buffer)
 	}
 }
 
+// Reads past the braced menu definition that comes next in the menu file being parsed, and gives the
+// name it has ("" if none)
+static void PC_SkipMenuDef( char *name, const int nameSize )
+{
+	int depth = 0;
+
+	name[0] = '\0';
+	while ( 1 )
+	{
+		const char *token = PC_ParseExt();
+		if ( !token || !*token )
+		{
+			return;
+		}
+
+		if ( *token == '{' )
+		{
+			depth++;
+		}
+		else if ( *token == '}' )
+		{
+			if ( --depth <= 0 )
+			{
+				return;
+			}
+		}
+		else if ( depth == 1 && !name[0] && !Q_stricmp( token, "name" ) )
+		{
+			token = PC_ParseExt();
+			if ( !token || !*token )
+			{
+				return;
+			}
+			Q_strncpyz( name, token, nameSize );
+		}
+	}
+}
+
+/*
+===============
+Menus_LoadAcademyMenu
+
+Loads one menu of a menu file from Jedi Academy's own copy of that file, with its pictures, even while
+Jedi Outcast's interface is on (which reads Jedi Outcast's copies of the menu files and their pictures
+first). For what Jedi Outcast's interface has nothing in place of: the HUDs of Jedi Academy's vehicles,
+which Jedi Outcast doesn't have. The file's other menus are passed over without being parsed, so none
+of their pictures are loaded: some have the same names as Jedi Outcast's HUD pictures, and would take
+their place. Returns whether that menu is loaded now (or already was).
+===============
+*/
+qboolean Menus_LoadAcademyMenu( const char *menuFile, const char *menuName )
+{
+	if ( Menus_FindByName( menuName ) )
+	{
+		return qtrue;
+	}
+
+	FS_BeginAcademyInterface();
+
+	char *buffer = NULL;
+	const int len = PC_StartParseSession( menuFile, &buffer );
+	if ( len > 0 )
+	{
+		while ( 1 )
+		{
+			const char *token = PC_ParseExt();
+			if ( !token || !*token )
+			{
+				break;
+			}
+
+			if ( Q_stricmp( token, "menudef" ) )
+			{
+				continue;
+			}
+
+			// Find the menu's name, then go back to its start if it is the one
+			const char *const menuStart = parseData[parseDataCount].bufferCurrent;
+			const int menuStartLine = parseData[parseDataCount].com_lines;
+			char name[MAX_QPATH];
+
+			PC_SkipMenuDef( name, sizeof( name ) );
+			if ( !Q_stricmp( name, menuName ) )
+			{
+				parseData[parseDataCount].bufferCurrent = menuStart;
+				parseData[parseDataCount].com_lines = menuStartLine;
+				Menu_New( buffer );
+				break;
+			}
+		}
+
+		PC_EndParseSession( buffer );
+	}
+	else if ( buffer )
+	{
+		ui.FS_FreeFile( buffer );
+	}
+
+	FS_EndAcademyInterface();
+
+	return Menus_FindByName( menuName ) ? qtrue : qfalse;
+}
+
 /*
 ===============
 Menus_CloseAll

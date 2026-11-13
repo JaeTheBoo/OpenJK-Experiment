@@ -1214,6 +1214,9 @@ Ghoul2 Insert End
 		re.AddLineLightToScene( (const float *) VMA(1), (const float *) VMA(2), VMF(3), VMF(4), VMF(5), VMF(6) );
 		return 0;
 
+	case CG_OPENJK_UI_LOADACADEMYMENU:
+		return Menus_LoadAcademyMenu( (const char *) VMA(1), (const char *) VMA(2) );
+
 	case CG_UI_STRING_INIT:
 		String_Init();
 		return 0;

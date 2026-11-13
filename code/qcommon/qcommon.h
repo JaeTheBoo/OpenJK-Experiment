@@ -527,6 +527,9 @@ qboolean FS_SetOutcastInterface( qboolean on );
 int FS_OutcastInterfaceFolders( const char *const **folders );
 // while on, Jedi Outcast's menus and their art and sounds win over Jedi Academy's files of the same
 // names (only with Jedi Outcast's game data mounted; returns whether it is on)
+void	FS_BeginAcademyInterface( void );
+void	FS_EndAcademyInterface( void );
+// between these, Jedi Academy's own copies of those files are read again, even while that is on
 
 void	FS_WriteFile( const char *qpath, const void *buffer, int size );
 // writes a complete file, creating any subdirectories needed

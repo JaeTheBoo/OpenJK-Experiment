@@ -598,6 +598,12 @@ void cgi_UI_Menu_Paint( void *menu, qboolean force )
 	Q_syscall( CG_OPENJK_MENU_PAINT, menu, force );
 }
 
+// Loads that menu from Jedi Academy's own copy of the menu file, even while Jedi Outcast's interface is on
+qboolean cgi_UI_LoadAcademyMenu( const char *menuFile, const char *menuName )
+{
+	return (qboolean)( Q_syscall( CG_OPENJK_UI_LOADACADEMYMENU, menuFile, menuName ) != 0 );
+}
+
 void cgi_R_Set2DAnchor( int anchor )
 {
 	Q_syscall( CG_OPENJK_R_SET2DANCHOR, anchor );
