@@ -896,6 +896,7 @@ void CG_DrawOutcastDataPadUpdated( void );
 //
 qboolean CG_DrawScoreboard( void );
 extern void CG_MissionCompletion(void);
+extern void CG_MissionCompletionBriefing( const int x, const int y, const int w, const int h, const float *color );
 
 //
 // cg_consolecmds.c

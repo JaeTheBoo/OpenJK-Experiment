@@ -784,7 +784,9 @@ static void CG_GetLoadScreenInfo(int *weaponBits,int *forceBits)
 ====================
 CG_DrawLoadingScreen
 
-Load screen displays the map pic, the mission briefing and weapons/force powers
+Load screen displays the map pic, the mission briefing and weapons/force powers. After a level change
+of Jedi Outcast's story, the statistics of the level before take the briefing's place (its levels have
+none): Jedi Outcast's mission status screen, in this screen's look.
 ====================
 */
 static void CG_DrawLoadingScreen( qhandle_t	levelshot ,const char *mapName)
@@ -794,8 +796,27 @@ static void CG_DrawLoadingScreen( qhandle_t	levelshot ,const char *mapName)
 	qhandle_t	background;
 	int weapons=0, forcepowers=0;
 
+	// Jedi Outcast's level changes ask for the statistics (Jedi Academy's story never does): they go in the briefing's
+	// box, if the menu has it
+	int briefingX, briefingY, briefingW, briefingH;
+	vec4_t briefingColor;
+	const qboolean missionStatus = ( gi.Cvar_VariableIntegerValue( "cg_missionstatusscreen" )
+		&& cgi_UI_GetMenuItemInfo(
+			"loadScreen",
+			"briefingtext",
+			&briefingX,
+			&briefingY,
+			&briefingW,
+			&briefingH,
+			briefingColor,
+			&background) ) ? qtrue : qfalse;
+
 	// Get mission briefing for load screen
-	if (cgi_SP_GetStringTextString( va("BRIEFINGS_%s",mapName), NULL, 0 ) == 0)
+	if ( missionStatus )
+	{
+		cgi_Cvar_Set( "ui_missionbriefing", "" );	// the statistics take its place (below)
+	}
+	else if (cgi_SP_GetStringTextString( va("BRIEFINGS_%s",mapName), NULL, 0 ) == 0)
 	{
 		cgi_Cvar_Set( "ui_missionbriefing", "@BRIEFINGS_NONE" );
 	}
@@ -840,6 +861,13 @@ static void CG_DrawLoadingScreen( qhandle_t	levelshot ,const char *mapName)
 			cgi_R_SetColor( color );
 			CG_DrawPic( xPos, yPos, width, height, levelshot );
 		}
+
+		// The briefing's box reaches down behind the weapons and Force powers: the statistics keep to the upper
+		// part of the screen, beside the level's picture and no lower than it
+		if ( missionStatus && yPos + height > briefingY )
+		{
+			briefingH = Q_min( briefingH, yPos + height - briefingY );
+		}
 	}
 
 	// Get player weapons and force power info
@@ -855,6 +883,12 @@ static void CG_DrawLoadingScreen( qhandle_t	levelshot ,const char *mapName)
 	if (forcepowers)
 	{
 		CG_DrawLoadForcePowers(forcepowers);
+	}
+
+	// The level statistics in the briefing's box (drawn before the menu, so that its scan lines go over them too)
+	if ( missionStatus )
+	{
+		CG_MissionCompletionBriefing( briefingX, briefingY, briefingW, briefingH, briefingColor );
 	}
 }
 
