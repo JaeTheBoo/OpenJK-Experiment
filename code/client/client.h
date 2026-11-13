@@ -396,6 +396,9 @@ void	SCR_DrawBigChar( int x, int y, int ch );
 void	SCR_DrawSmallChar( int x, int y, int ch );
 
 void	SCR_PrecacheScreenshot();
+#ifndef JK2_MODE
+qboolean SCR_DrawLoadingScreenshot( float x, float y, float w, float h );	// a loaded game's picture, qfalse if none
+#endif
 
 //
 // cl_cin.c

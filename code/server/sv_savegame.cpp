@@ -1412,6 +1412,14 @@ qboolean SG_ReadSavegame(
 	::SG_ReadScreenshot(
 		true,
 		nullptr);
+#else
+	// Jedi Outcast's loading screen shows the picture of the game being loaded instead of the level's, when it has one
+	// (a hub level returned to has the one taken as the player left it). The client keeps it until the level is on.
+	{
+		byte *pbLoadingScreenshot = (byte *)Z_Malloc(SG_SCR_WIDTH * SG_SCR_HEIGHT * 4, TAG_TEMP_WORKSPACE, qfalse);
+		SCR_SetLoadingScreenshot(SG_GetSaveImage(psPathlessBaseName, pbLoadingScreenshot) ? pbLoadingScreenshot : NULL);
+		Z_Free(pbLoadingScreenshot);
+	}
 #endif
 
 	sgh.read_chunk(

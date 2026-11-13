@@ -1064,6 +1064,7 @@ void	cgi_R_SetColor( const float *rgba );	// NULL = 1,1,1,1
 // pictures that span the whole 640 wide area too (they are stretched over the screen otherwise).
 enum { ANCHOR_LEFT = -1, ANCHOR_CENTRE = 0, ANCHOR_RIGHT = 1, ANCHOR_KEEP_SHAPE = 2 };
 void	cgi_R_Set2DAnchor( int anchor );
+qboolean cgi_R_DrawLoadingScreenshot( float x, float y, float w, float h );	// a loaded game's picture, qfalse if none
 void	cgi_R_DrawStretchPic( float x, float y, float w, float h,
 	float s1, float t1, float s2, float t2, qhandle_t hShader );
 

@@ -1217,6 +1217,11 @@ Ghoul2 Insert End
 	case CG_OPENJK_UI_LOADACADEMYMENU:
 		return Menus_LoadAcademyMenu( (const char *) VMA(1), (const char *) VMA(2) );
 
+#ifndef JK2_MODE
+	case CG_OPENJK_R_DRAWLOADINGSCREENSHOT:
+		return SCR_DrawLoadingScreenshot( VMF(1), VMF(2), VMF(3), VMF(4) );
+#endif
+
 	case CG_UI_STRING_INIT:
 		String_Init();
 		return 0;
@@ -1598,6 +1603,9 @@ void CL_FirstSnapshot( void ) {
 	re.RegisterMedia_LevelLoadEnd();
 
 	cls.state = CA_ACTIVE;
+#ifndef JK2_MODE
+	SCR_SetLoadingScreenshot( NULL );	// (the loading screen is over: a saved game's picture was only for it)
+#endif
 
 	// set the timedelta so we are exactly on this first frame
 	cl.serverTimeDelta = cl.frame.serverTime - cls.realtime;

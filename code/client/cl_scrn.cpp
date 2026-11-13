@@ -629,6 +629,51 @@ void SCR_SetScreenshot(const byte *pbData, int w, int h)
 	}
 }
 
+#ifndef JK2_MODE
+// Jedi Outcast's loading screen of a saved game shows that game's picture instead of the level's (it read it into this
+// same buffer). Only from the load of that game until its level is on, so a later level never shows it.
+static qboolean scr_loadingScreenshotValid = qfalse;	// bScreenData is the picture of the saved game being loaded
+
+/*
+==================
+SCR_SetLoadingScreenshot
+
+The picture of the saved game being loaded (SG_SCR_WIDTH x SG_SCR_HEIGHT RGBA, top row first), or NULL when it has
+none and when its level is on
+==================
+*/
+void SCR_SetLoadingScreenshot( const byte *pbData )
+{
+	// (a game is being loaded or has just been: a picture taken before shows a game that is gone)
+	scr_screenshotCurrent = qfalse;
+
+	scr_loadingScreenshotValid = pbData ? qtrue : qfalse;
+	if ( pbData )
+	{
+		SCR_SetScreenshot( pbData, SG_SCR_WIDTH, SG_SCR_HEIGHT );
+	}
+}
+
+/*
+==================
+SCR_DrawLoadingScreenshot
+
+Draws the picture of the saved game being loaded over that rectangle of the 640x480 screen (one over all of it is
+centred in its shape on a wide screen, between black sides); qfalse, drawing nothing, when there is none
+==================
+*/
+qboolean SCR_DrawLoadingScreenshot( float x, float y, float w, float h )
+{
+	if ( !scr_loadingScreenshotValid || !re.DrawStretchRaw )
+	{
+		return qfalse;
+	}
+
+	re.DrawStretchRaw( x, y, w, h, SG_SCR_WIDTH, SG_SCR_HEIGHT, bScreenData, 0, qtrue );
+	return qtrue;
+}
+#endif
+
 
 #ifdef JK2_MODE
 // This is just a client-side wrapper for the function RE_TempRawImage_ReadFromFile() in the renderer code...

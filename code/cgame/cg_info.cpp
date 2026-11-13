@@ -864,7 +864,7 @@ CG_DrawOutcastLoadingScreen
 
 Jedi Outcast's load screen (its menus have no "loadscreen" menu): the level's picture over the whole
 screen, in its shape, and after a level change the statistics of the level before over it. A new
-story begins on black with "A long time ago...".
+story begins on black with "A long time ago...". A saved game shows its own picture instead.
 ====================
 */
 static void CG_DrawOutcastLoadingScreen( qhandle_t levelshot, const char *mapName )
@@ -885,8 +885,14 @@ static void CG_DrawOutcastLoadingScreen( qhandle_t levelshot, const char *mapNam
 		return;
 	}
 
+	// A saved game being loaded shows its picture, as in Jedi Outcast: the game as the player last saw it, and on a
+	// return to a hub level, that level as the player left it (the engine reads it from saves/<name>.jpg). One saved
+	// without a picture shows the level's. (The statistics below are never on: loading a game turns them off.)
+	const qboolean drewSavedGamePicture = ( g_eSavedGameJustLoaded == eFULL
+		&& cgi_R_DrawLoadingScreenshot( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT ) ) ? qtrue : qfalse;
+
 	// (a level without a picture stays black: the fallback is Jedi Academy's title art)
-	if ( cgi_R_RegisterShaderNoMip( va( "levelshots/%s", mapName ) ) )
+	if ( !drewSavedGamePicture && cgi_R_RegisterShaderNoMip( va( "levelshots/%s", mapName ) ) )
 	{
 		cgi_R_SetColor( NULL );
 		cgi_R_Set2DAnchor( ANCHOR_KEEP_SHAPE );

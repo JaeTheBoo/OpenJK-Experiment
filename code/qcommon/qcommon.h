@@ -804,6 +804,7 @@ qboolean UI_GameCommand( void );
 byte*	SCR_GetScreenshot(qboolean *qValid);
 #ifndef JK2_MODE
 const byte *SCR_GetSaveGameScreenshot( void );	// the picture for a game saved now, or NULL
+void	SCR_SetLoadingScreenshot( const byte *pbData );	// the picture of the saved game being loaded, or NULL
 #endif
 #ifdef JK2_MODE
 void	SCR_SetScreenshot(const byte *pbData, int w, int h);

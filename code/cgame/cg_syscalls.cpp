@@ -604,6 +604,12 @@ qboolean cgi_UI_LoadAcademyMenu( const char *menuFile, const char *menuName )
 	return (qboolean)( Q_syscall( CG_OPENJK_UI_LOADACADEMYMENU, menuFile, menuName ) != 0 );
 }
 
+// Draws the picture of the saved game being loaded (Jedi Outcast's loading screen shows it); qfalse when it has none
+qboolean cgi_R_DrawLoadingScreenshot( float x, float y, float w, float h )
+{
+	return (qboolean)( Q_syscall( CG_OPENJK_R_DRAWLOADINGSCREENSHOT, PASSFLOAT(x), PASSFLOAT(y), PASSFLOAT(w), PASSFLOAT(h) ) != 0 );
+}
+
 void cgi_R_Set2DAnchor( int anchor )
 {
 	Q_syscall( CG_OPENJK_R_SET2DANCHOR, anchor );
