@@ -960,6 +960,9 @@ static void UI_ChooseCampaign( const char *campaign )
 
 static void UI_StartOutcastCampaign( void )
 {
+	// the story's own menus and HUD from here (loading the level loads them)
+	Cvar_Set( "ui_style", "outcast" );
+
 	Cvar_Set( "name", "Kyle" );
 	Cvar_Set( "g_char_model", "kyle" );
 	Cvar_Set( "g_char_skin_head", "model_default" );
@@ -1001,6 +1004,59 @@ qboolean UI_OutcastCampaign_OpenMenu( const char *menuName )
 		return qtrue;
 	}
 	return qfalse;
+}
+
+/*
+===============
+The Interface row
+
+Setup's Game Options page has a row for whose menus and HUD these are (Menu_AddInterfaceRow, ui_shared.cpp), when
+Jedi Outcast's game data is there. Changing it changes ui_style, then "uiScript interfaceStyle" puts the other
+interface on at once: vid_restart, then Setup again on its Game Options page, in the other menus. (New Game and loading
+a saved game also set ui_style, to the story's own: UI_StartOutcastCampaign, SG_ReadSavegame.)
+===============
+*/
+static qboolean ui_reopenGameOptions;	// (kept through the restart: this module is not unloaded)
+
+static void UI_ApplyInterfaceStyle( void )
+{
+	const qboolean outcast = ( !Q_stricmp( Cvar_VariableString( "ui_style" ), "outcast" ) && UI_OutcastDataAvailable() ) ? qtrue : qfalse;
+	if ( outcast == UI_OutcastStyle() )
+	{
+		return;
+	}
+	ui_reopenGameOptions = qtrue;
+	if ( cls.state == CA_DISCONNECTED )
+	{
+		ui.Cmd_ExecuteText( EXEC_APPEND, "vid_restart\n" );	// (then the main menu is asked for: UI_MainMenu)
+	}
+	else
+	{
+		ui.Cmd_ExecuteText( EXEC_APPEND, "vid_restart\nuimenu ingameSetupMenu\n" );
+	}
+}
+
+// As the menus come back after that restart: Setup (setupMenu or ingameSetupMenu, the same names in both games'
+// menus), shown at its Game Options page. Returns qtrue if it was opened
+static qboolean UI_ReopenGameOptions( const char *setupMenu )
+{
+	if ( !ui_reopenGameOptions )
+	{
+		return qfalse;
+	}
+	ui_reopenGameOptions = qfalse;
+	Menus_CloseAll();
+	menuDef_t *menu = Menus_ActivateByName( setupMenu );
+	if ( !menu )
+	{
+		return qfalse;
+	}
+	itemDef_t *button = Menu_FindItemByName( menu, "gameoptionmenubutton" );
+	if ( button && button->action )
+	{
+		Item_RunScript( button, button->action );
+	}
+	return qtrue;
 }
 #endif // !JK2_MODE
 
@@ -1183,6 +1239,10 @@ static qboolean UI_RunMenuScript ( const char **args )
 				UI_ChooseCampaign( campaign );
 			}
 		}
+		else if (Q_stricmp(name, "interfaceStyle") == 0)
+		{//Setup's Interface row changed ui_style: put that interface on
+			UI_ApplyInterfaceStyle();
+		}
 #endif
 		else if (Q_stricmp(name, "startgame") == 0)
 		{
@@ -1201,6 +1261,10 @@ static qboolean UI_RunMenuScript ( const char **args )
 			}
 			else
 			{
+				if ( UI_OutcastDataAvailable() )
+				{
+					Cvar_Set( "ui_style", "academy" );	// (the story's own menus and HUD)
+				}
 				ui.Cmd_ExecuteText( EXEC_APPEND, "map yavin1\n");
 			}
 #endif
@@ -2800,6 +2864,25 @@ void _UI_Init( qboolean inGameLoad )
 	// the game's drawing (datapad pages, loading screen, death screen) follows the menus that are loaded
 	Cvar_Get( "ui_outcastInterface", "0", CVAR_ROM );
 	Cvar_Set( "ui_outcastInterface", ui_outcastStyle ? "1" : "0" );
+	{
+		// The pictures and sounds of the other interface, kept since it was loaded (a level loading keeps what it
+		// can, and the sounds outlive even vid_restart), have the names of this one's: read them again
+		static qboolean cachedOutcastStyle;	// (the style of what was cached: Jedi Academy's at the start)
+		if ( ui_outcastStyle != cachedOutcastStyle )
+		{
+			const char *const *folders;
+			const int numFolders = FS_OutcastInterfaceFolders( &folders );
+			if ( re.PurgeImageFolders )
+			{
+				re.PurgeImageFolders( folders, numFolders );
+			}
+			for ( int i = 0; i < numFolders; i++ )
+			{
+				S_PurgeSoundFolder( folders[i] );
+			}
+			cachedOutcastStyle = ui_outcastStyle;
+		}
+	}
 #endif
 
 	// The fonts the menus number are the ones they register, in their order: start that list again (after
@@ -4296,6 +4379,13 @@ void UI_InGameMenu(const char*menuID)
 #endif
 	Menus_CloseByName("mainhud");
 
+#ifndef JK2_MODE
+	if ( menuID && !Q_stricmp( menuID, "ingameSetupMenu" ) && UI_ReopenGameOptions( menuID ) )
+	{//(after the Interface row's restart)
+		ui.Key_SetCatcher( KEYCATCH_UI );
+		return;
+	}
+#endif
 	if (menuID)
 	{
 		Menus_ActivateByName(menuID);
@@ -4337,6 +4427,12 @@ void UI_MainMenu(void)
 
 	ui.Key_SetCatcher( KEYCATCH_UI );
 
+#ifndef JK2_MODE
+	if ( UI_ReopenGameOptions( "setupMenu" ) )
+	{//(after the Interface row's restart)
+		return;
+	}
+#endif
 	menuDef_t *m = Menus_ActivateByName("mainMenu");
 	if (!m)
 	{	//wha? try again

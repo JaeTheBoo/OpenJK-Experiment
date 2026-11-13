@@ -6319,6 +6319,100 @@ void Menu_UpdatePosition(menuDef_t *menu)
   }
 }
 
+#ifndef JK2_MODE
+/*
+===============
+Menu_AddInterfaceRow
+
+Setup's Game Options page gets a row for whose menus and HUD these are, Jedi Academy's or Jedi Outcast's (ui_style), when
+Jedi Outcast's game data is there to offer the choice. It is a copy of the row of the subtitles, put in the free place
+above the row of the text's language (both games' pages have one there). Changing it runs "uiScript interfaceStyle"
+(ui_main.cpp), which puts the other interface on. Does nothing if the page is not the one of the stock menus.
+===============
+*/
+static void Menu_AddInterfaceRow( menuDef_t *menu )
+{
+	if ( !Cvar_VariableString( "fs_outcastpath" )[0] || menu->itemCount >= MAX_MENUITEMS )
+	{
+		return;
+	}
+	itemDef_t *subtitles = NULL, *language = NULL;
+	for ( int i = 0; i < menu->itemCount; i++ )
+	{
+		itemDef_t *item = menu->items[i];
+		if ( !item->window.group || Q_stricmp( item->window.group, "options" ) || item->type != ITEM_TYPE_MULTI || !item->cvar )
+		{
+			continue;
+		}
+		if ( !Q_stricmp( item->cvar, "g_subtitles" ) )
+		{
+			subtitles = item;
+		}
+		else if ( !language && ( !Q_stricmp( item->cvar, "se_language" ) || !Q_stricmp( item->cvar, "sp_language" ) ) )
+		{
+			language = item;
+		}
+	}
+	if ( !subtitles || !language || !subtitles->typeData )
+	{
+		return;
+	}
+
+	// the place: one row above the language, if no row of the page is there
+	const rectDef_t &below = language->window.rectClient;
+	const float y = below.y - below.h;
+	for ( int i = 0; i < menu->itemCount; i++ )
+	{
+		const itemDef_t *item = menu->items[i];
+		const rectDef_t &r = item->window.rectClient;
+		if ( item->window.group && !Q_stricmp( item->window.group, "options" ) && r.y < y + below.h && r.y + r.h > y )
+		{
+			return;
+		}
+	}
+
+	itemDef_t *row = (itemDef_t *)UI_Alloc( sizeof( itemDef_t ) );
+	memcpy( row, subtitles, sizeof( itemDef_t ) );
+	row->typeData = NULL;
+	Item_ValidateTypeData( row );
+	multiDef_t *multiPtr = (multiDef_t *)row->typeData;
+	memset( multiPtr, 0, sizeof( *multiPtr ) );
+	multiPtr->cvarList[0] = String_Alloc( "Jedi Academy" );
+	multiPtr->cvarStr[0] = String_Alloc( "academy" );
+	multiPtr->cvarList[1] = String_Alloc( "Jedi Outcast" );
+	multiPtr->cvarStr[1] = String_Alloc( "outcast" );
+	multiPtr->count = 2;
+	multiPtr->strDef = qtrue;
+	row->window.name = (char *)String_Alloc( "interface" );
+	row->window.rectClient.y = y;
+	row->cvar = String_Alloc( "ui_style" );
+	row->text = (char *)String_Alloc( "Interface:" );
+	row->descText = String_Alloc( "The menus and the HUD of Jedi Academy or of Jedi Outcast. New Game and loading a saved game "
+		"change them to the story's own." );
+	row->cvarTest = NULL;
+	row->enableCvar = NULL;
+	row->cvarFlags = 0;
+	row->action = String_Alloc( "\"play\" \"sound/interface/button1.wav\" \"uiScript\" \"interfaceStyle\" " );
+
+	// the highlight bar the page has at that place, if any (the bars are a little off the rows on some pages)
+	row->mouseEnter = row->mouseExit = NULL;
+	for ( int i = 0; i < menu->itemCount; i++ )
+	{
+		const itemDef_t *bar = menu->items[i];
+		const rectDef_t &r = bar->window.rectClient;
+		if ( bar->window.name && bar->window.group && !Q_stricmp( bar->window.group, "highlights" ) &&
+			 fabsf( r.y - y ) <= 3.0f && fabsf( r.x - row->window.rectClient.x ) <= 3.0f && fabsf( r.h - below.h ) <= 3.0f )
+		{
+			row->mouseEnter = String_Alloc( va( "\"show\" \"%s\" ", bar->window.name ) );
+			row->mouseExit = String_Alloc( va( "\"hide\" \"%s\" ", bar->window.name ) );
+			break;
+		}
+	}
+	menu->items[menu->itemCount++] = row;
+	Com_Printf( "%s: added the Interface row at %.0f\n", menu->window.name ? menu->window.name : "menu", y );
+}
+#endif
+
 /*
 ===============
 Menu_PostParse
@@ -6330,6 +6424,9 @@ void Menu_PostParse(menuDef_t *menu)
 	{
 		return;
 	}
+#ifndef JK2_MODE
+	Menu_AddInterfaceRow( menu );
+#endif
 
 	if (menu->fullScreen)
 	{

@@ -1942,11 +1942,11 @@ static qboolean	fs_outcastInterface;	// Jedi Outcast's interface is on, see FS_S
 
 // The folders of what the interface is made of, that both games have files of the same names in:
 // the menus, their pictures, the HUD's pictures, and the sounds of the buttons
-static qboolean FS_IsOutcastInterfaceFile( const char *filename ) {
-	static const char *const folders[] = { "ui/", "menu/", "gfx/menus/", "gfx/hud/", "sound/interface/" };
+static const char *const fs_outcastInterfaceFolders[] = { "ui/", "menu/", "gfx/menus/", "gfx/hud/", "sound/interface/" };
 
-	for ( size_t i = 0; i < ARRAY_LEN( folders ); i++ ) {
-		if ( !Q_stricmpn( filename, folders[i], (int)strlen( folders[i] ) ) ) {
+static qboolean FS_IsOutcastInterfaceFile( const char *filename ) {
+	for ( size_t i = 0; i < ARRAY_LEN( fs_outcastInterfaceFolders ); i++ ) {
+		if ( !Q_stricmpn( filename, fs_outcastInterfaceFolders[i], (int)strlen( fs_outcastInterfaceFolders[i] ) ) ) {
 			return qtrue;
 		}
 	}
@@ -1981,6 +1981,18 @@ qboolean FS_SetOutcastInterface( qboolean on ) {
 #else
 	fs_outcastInterface = ( on && fs_outcastpath && fs_outcastpath->string[0] ) ? qtrue : qfalse;
 	return fs_outcastInterface;
+#endif
+}
+
+// The folders FS_SetOutcastInterface reads from Jedi Outcast's game data first (the media cached from them is
+// dropped when the interface changes, see _UI_Init); returns how many
+int FS_OutcastInterfaceFolders( const char *const **folders ) {
+#ifdef JK2_MODE
+	*folders = NULL;
+	return 0;
+#else
+	*folders = fs_outcastInterfaceFolders;
+	return (int)ARRAY_LEN( fs_outcastInterfaceFolders );
 #endif
 }
 

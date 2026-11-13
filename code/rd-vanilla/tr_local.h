@@ -1409,6 +1409,7 @@ void*		RE_RegisterModels_Malloc(int iSize, void *pvDiskBufferIfJustLoaded, const
 void		RE_RegisterModels_StoreShaderRequest(const char *psModelFileName, const char *psShaderName, const int *piShaderIndexPoke);
 void		RE_RegisterModels_Info_f(void);
 qboolean	RE_RegisterImages_LevelLoadEnd(void);
+void		RE_PurgeImageFolders( const char *const *folders, int numFolders );
 void		RE_RegisterImages_Info_f(void);
 
 

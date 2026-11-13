@@ -174,6 +174,9 @@ typedef struct {
 	int		(*RegisterMedia_GetLevel)(void);
 	qboolean	(*RegisterModels_LevelLoadEnd)(qboolean bDeleteEverythingNotUsedThisLevel );
 	qboolean	(*RegisterImages_LevelLoadEnd)(void);
+	// drops the cached images whose names begin with one of the folders ("gfx/menus/"...), so that they are read again
+	// when next used: for the interface of the other game, whose pictures have the same names (ui_style)
+	void	(*PurgeImageFolders)( const char *const *folders, int numFolders );
 
 	// the vis data is a large enough block of data that we go to the trouble
 	// of sharing it with the clipmodel subsystem

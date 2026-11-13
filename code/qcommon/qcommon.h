@@ -524,6 +524,7 @@ void	FS_EndOutcastOnly( void );
 // like FS_ReadFile, but only from Jedi Outcast's game data (fs_outcastpath), even where a file of the
 // same name hides it; -1 when it is not there (always, without fs_outcastpath)
 qboolean FS_SetOutcastInterface( qboolean on );
+int FS_OutcastInterfaceFolders( const char *const **folders );
 // while on, Jedi Outcast's menus and their art and sounds win over Jedi Academy's files of the same
 // names (only with Jedi Outcast's game data mounted; returns whether it is on)
 

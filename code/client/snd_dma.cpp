@@ -5241,6 +5241,40 @@ int SND_FreeOldestSound(sfx_t *pButNotThisOne /* = NULL */)
 
 	return iBytesFreed;
 }
+// Drops the loaded sounds whose names begin with this folder ("sound/interface/"), and forgets which of them could not
+// be found, so that each is read again when next played: for a change to the interface of the other game (ui_style,
+// see code/ui UI_OutcastStyle), whose sounds have the same names. A sound still playing is kept.
+void S_PurgeSoundFolder( const char *folder )
+{
+	const int len = (int)strlen( folder );
+	int dropped = 0;
+
+	for ( int i = 1; i < s_numSfx; i++ )	// (not the default sound)
+	{
+		sfx_t *sfx = &s_knownSfx[i];
+
+		if ( Q_stricmpn( sfx->sSoundName, folder, len ) )
+		{
+			continue;
+		}
+		int iChannel;
+		for ( iChannel = 0; iChannel < MAX_CHANNELS && s_channels[iChannel].thesfx != sfx; iChannel++ )
+		{
+		}
+		if ( iChannel < MAX_CHANNELS )
+		{
+			continue;
+		}
+		if ( sfx->bInMemory || sfx->bDefaultSound )
+		{
+			SND_FreeSFXMem( sfx );
+			sfx->bDefaultSound = false;
+			dropped++;
+		}
+	}
+	Com_DPrintf( "S_PurgeSoundFolder: %d sounds in %s dropped\n", dropped, folder );
+}
+
 int SND_FreeOldestSound(void)
 {
 	return SND_FreeOldestSound(NULL);	// I had to add a void-arg version of this because of link issues, sigh

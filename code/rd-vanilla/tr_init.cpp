@@ -2144,6 +2144,7 @@ extern "C" Q_EXPORT refexport_t* QDECL GetRefAPI ( int apiVersion, refimport_t *
 	REX(RegisterMedia_LevelLoadEnd);
 	REX(RegisterMedia_GetLevel);
 	REX(RegisterImages_LevelLoadEnd);
+	REX(PurgeImageFolders);
 	REX(RegisterModels_LevelLoadEnd);
 
 	REX(SetWorldVisData);

@@ -1321,6 +1321,14 @@ qboolean SG_ReadSavegame(
 	Cvar_Set( "g_campaign", "academy" );
 #endif
 	::SG_ReadCvars();
+#ifndef JK2_MODE
+	// A saved game the player loads brings the menus and HUD of its story (ui_style, see code/ui UI_OutcastStyle;
+	// the level loading loads them), when there is a choice. (Not the saves of the levels a hub returns to.)
+	if ( !qbLoadTransition && Cvar_VariableString( "fs_outcastpath" )[0] )
+	{
+		Cvar_Set( "ui_style", !Q_stricmp( Cvar_VariableString( "g_campaign" ), "outcast" ) ? "outcast" : "academy" );
+	}
+#endif
 
 	// read game state
 	const qboolean qbAutosave = ::ReadGame();

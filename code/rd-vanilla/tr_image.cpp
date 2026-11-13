@@ -32,6 +32,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "../rd-common/tr_common.h"
 #include <png.h>
 #include <map>
+#include <set>
 
 static byte			 s_intensitytable[256];
 static unsigned char s_gammatable[256];
@@ -979,6 +980,70 @@ qboolean RE_RegisterImages_LevelLoadEnd(void)
 	GL_ResetBinds();
 
 	return imageDeleted;
+}
+
+/*
+================
+RE_PurgeImageFolders
+
+Drops the cached images whose names begin with one of these folders, so that the next shader to use one reads its file
+again, from wherever the file system finds it then. For a change to the interface of the other game (ui_style, see
+code/ui UI_OutcastStyle), whose pictures have the same names. An image a shader made so far still draws with is kept.
+================
+*/
+void RE_PurgeImageFolders( const char *const *folders, int numFolders )
+{
+	std::set<const image_t *> inUse;
+	for ( int i = 0; i < tr.numShaders; i++ )
+	{
+		const shader_t *sh = tr.shaders[i];
+		for ( int s = 0; sh && sh->stages && s < sh->numUnfoggedPasses; s++ )
+		{
+			for ( int b = 0; b < NUM_TEXTURE_BUNDLES; b++ )
+			{
+				const textureBundle_t &bundle = sh->stages[s].bundle[b];
+				if ( bundle.numImageAnimations > 1 )
+				{
+					const image_t *const *frames = (const image_t *const *)bundle.image;	// (an animMap's frames)
+					inUse.insert( frames, frames + bundle.numImageAnimations );
+				}
+				else
+				{
+					inUse.insert( bundle.image );
+				}
+			}
+		}
+		for ( int k = 0; sh && sh->sky && k < 6; k++ )
+		{
+			inUse.insert( sh->sky->outerbox[k] );
+		}
+	}
+
+	int dropped = 0;
+	for ( AllocatedImages_t::iterator itImage = AllocatedImages.begin(); itImage != AllocatedImages.end(); /* blank */ )
+	{
+		image_t *pImage = itImage->second;
+		bool drop = false;
+		for ( int f = 0; f < numFolders && !drop; f++ )
+		{
+			drop = !Q_stricmpn( pImage->imgName, folders[f], (int)strlen( folders[f] ) );
+		}
+		if ( drop && !inUse.count( pImage ) )
+		{
+			R_Images_DeleteImageContents( pImage );
+			AllocatedImages.erase( itImage++ );
+			dropped++;
+		}
+		else
+		{
+			++itImage;
+		}
+	}
+	if ( dropped )
+	{
+		GL_ResetBinds();
+	}
+	ri.Printf( PRINT_DEVELOPER, "RE_PurgeImageFolders: %d images dropped\n", dropped );
 }
 
 
