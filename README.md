@@ -156,6 +156,7 @@ These report state and are not meant to be changed:
 
 - `r_glslAvail`, `r_postAvail`, `r_smaaAvail`, `r_softAvail`, `r_shadowMapsAvail`, `r_rtAvail`: whether the renderer can do each effect. They decide which rows Setup shows.
 - `ui_outcastInterface`: `1` while Jedi Outcast's menus are loaded.
+- `cg_missionstatusscreen`: `1` when the next loading screen is to show the statistics of the level just finished (Jedi Outcast's level changes ask for it; its menus show them).
 - `cl_rendererFailure`: why the Vulkan renderer couldn't start, if it couldn't.
 - `com_configVersion`: how far an old config has been brought up to date.
 - `com_levelLoading`, `r_outcastAnimationsStart`: internal.

@@ -1346,11 +1346,11 @@ qboolean SG_ReadSavegame(
 	char sComment[iSG_COMMENT_SIZE];
 	char sMapCmd[iSG_MAPCMD_SIZE];
 
-#ifdef JK2_MODE
+	// A loaded game's loading screen shows no level statistics (CG_MissionCompletion; Jedi Outcast's
+	// story on this engine needs this too)
 	Cvar_Set(
 		"cg_missionstatusscreen",
 		"0");
-#endif
 
 	ojk::SavedGame& saved_game = ojk::SavedGame::get_instance();
 

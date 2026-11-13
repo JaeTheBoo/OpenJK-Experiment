@@ -25,6 +25,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "Q3_Interface.h"
 #include "g_local.h"
 #include "g_functions.h"
+#include "g_outcast.h"
 extern void G_SetEnemy( gentity_t *self, gentity_t *enemy );
 
 //==========================================================
@@ -1042,6 +1043,11 @@ void target_level_change_use(gentity_t *self, gentity_t *other, gentity_t *activ
 
 	set_mission_stats_cvars();
 
+	// Jedi Outcast shows the statistics of the level just finished on the next level's loading screen
+	// (CG_MissionCompletion), unless the level change is marked HIDEINFO (spawnflag 2: only in its
+	// story, as Jedi Academy uses that flag for NO_STORYSOUND). The map command and loading a game
+	// clear it again.
+	gi.cvar_set( "cg_missionstatusscreen", ( G_IsOutcastCampaign() && !( self->spawnflags & 2 ) ) ? "1" : "0" );
 }
 
 /*QUAKED target_level_change (1 0 0) (-4 -4 -4) (4 4 4) HUB NO_STORYSOUND

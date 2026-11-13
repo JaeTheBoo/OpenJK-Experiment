@@ -490,6 +490,7 @@ stringID_table_t setTable[] =
 	ENUM2STRING(SET_NO_ANGLES),
 	ENUM2STRING(SET_SABER_ORIGIN),
 	ENUM2STRING(SET_SKIN),
+	ENUM2STRING(SET_MISSION_STATUS_SCREEN),
 
 	{ "",	SET_ }
 };
@@ -9385,6 +9386,12 @@ extern void LockDoors(gentity_t *const ent);
 	case SET_MISSIONSTATUSTIME:
 		int_data = atoi((char *) data);
 		cg.missionStatusDeadTime = level.time + int_data;
+		break;
+
+	case SET_MISSION_STATUS_SCREEN:
+		// Jedi Outcast's: the next level's loading screen shows this level's statistics, as after a
+		// target_level_change (Jedi Outcast turned it on whatever the value; "false" turns it off here)
+		gi.cvar_set( "cg_missionstatusscreen", Q_stricmp( "false", (char *)data ) ? "1" : "0" );
 		break;
 
 	case SET_CLOSINGCREDITS:

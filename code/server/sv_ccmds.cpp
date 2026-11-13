@@ -288,9 +288,10 @@ static void SV_Map_f( void )
 		// then cheats will be allowed
 		Cvar_Set( "helpUsObi", cheat ? "1" : "0" );
 	}
-#ifdef JK2_MODE
+	// A level started with this command shows no statistics of the level before on its loading screen
+	// (CG_MissionCompletion; the client loads the level after this). Jedi Outcast's story on this
+	// engine needs this too.
 	Cvar_Set( "cg_missionstatusscreen", "0" );
-#endif
 }
 
 /*

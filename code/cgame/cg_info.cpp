@@ -863,7 +863,8 @@ static void CG_DrawLoadingScreen( qhandle_t	levelshot ,const char *mapName)
 CG_DrawOutcastLoadingScreen
 
 Jedi Outcast's load screen (its menus have no "loadscreen" menu): the level's picture over the whole
-screen, in its shape. A new story begins on black with "A long time ago...".
+screen, in its shape, and after a level change the statistics of the level before over it. A new
+story begins on black with "A long time ago...".
 ====================
 */
 static void CG_DrawOutcastLoadingScreen( qhandle_t levelshot, const char *mapName )
@@ -885,15 +886,19 @@ static void CG_DrawOutcastLoadingScreen( qhandle_t levelshot, const char *mapNam
 	}
 
 	// (a level without a picture stays black: the fallback is Jedi Academy's title art)
-	if ( !cgi_R_RegisterShaderNoMip( va( "levelshots/%s", mapName ) ) )
+	if ( cgi_R_RegisterShaderNoMip( va( "levelshots/%s", mapName ) ) )
 	{
-		return;
+		cgi_R_SetColor( NULL );
+		cgi_R_Set2DAnchor( ANCHOR_KEEP_SHAPE );
+		CG_DrawPic( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, levelshot );
+		cgi_R_Set2DAnchor( ANCHOR_CENTRE );
 	}
 
-	cgi_R_SetColor( NULL );
-	cgi_R_Set2DAnchor( ANCHOR_KEEP_SHAPE );
-	CG_DrawPic( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, levelshot );
-	cgi_R_Set2DAnchor( ANCHOR_CENTRE );
+	// the mission status screen, which Jedi Outcast's level changes ask for (CG_MissionCompletion)
+	if ( gi.Cvar_VariableIntegerValue( "cg_missionstatusscreen" ) )
+	{
+		CG_MissionCompletion();
+	}
 }
 
 /*

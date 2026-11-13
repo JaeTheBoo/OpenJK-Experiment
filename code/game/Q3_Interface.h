@@ -329,6 +329,9 @@ typedef enum //# setType_e
 	//in-bhc tables
 	SET_LEAN,//## %t="LEAN_TYPES" # Lean left, right or stop leaning
 
+	// Jedi Outcast's (added last, so the values above stay as they were)
+	SET_MISSION_STATUS_SCREEN,//## %t="BOOL_TYPES" # Display Mission Status screen before advancing to next level
+
 	//# #eol
 	SET_
 } setType_t;

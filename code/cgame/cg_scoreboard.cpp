@@ -205,193 +205,147 @@ void CG_MissionFailed(void)
 
 }
 
+// One statistic of CG_MissionCompletion: its name in gold, its value in white after it
+static void CG_MissionCompletionLine( const int x, const int y, const char *label, const char *value )
+{
+	char text[1024]={0};
+
+	cgi_SP_GetStringTextString( label, text, sizeof(text) );
+	const int w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
+	cgi_R_Font_DrawString(x,   y, text,  colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
+	cgi_R_Font_DrawString(x+w, y, value, colorTable[CT_WHITE],   cgs.media.qhFontSmall, -1, 0.8f);
+}
+
+// A title above a column of statistics
+static void CG_MissionCompletionHeading( const int x, const int y, const char *label )
+{
+	char text[1024]={0};
+
+	cgi_SP_GetStringTextString( label, text, sizeof(text) );
+	cgi_R_Font_DrawString(x, y, text, colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
+}
+
 /*
 =================
 CG_MissionCompletion
+
+Jedi Outcast's mission status screen: the statistics of the level just finished, over the next
+level's loading screen. Its level changes ask for it (target_level_change unless marked HIDEINFO, or
+the SET_MISSION_STATUS_SCREEN script command, through cg_missionstatusscreen); the map command and
+loading a game clear it. Jedi Academy shows its statistics in its mission menus instead, so only
+Jedi Outcast's loading screen draws this (CG_DrawOutcastLoadingScreen). The player's session has
+been carried over to the new level by then, so these are still the last level's numbers.
 =================
 */
-#if 0
-/*
 void CG_MissionCompletion(void)
 {
+	const gclient_t *client = g_entities[0].client;
+	if ( !client )
+	{
+		return;
+	}
+	const missionStats_t &stats = client->sess.missionStats;
+
 	char text[1024]={0};
+	char of[1024]={0};
 	int w,x,y;
 	const int pad = 18;
 
 	cgi_SP_GetStringTextString( "SP_INGAME_MISSIONCOMPLETION", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontMedium, 1.2f);
+	w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontMedium, 1.2f);
 	cgi_R_Font_DrawString(320 - w/2, 53, text, colorTable[CT_LTGOLD1], cgs.media.qhFontMedium, -1, 1.2f);
 
 	x = 75;
-	y =86;
-	cgi_SP_GetStringTextString( "SP_INGAME_SECRETAREAS", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
-	cgi_R_Font_DrawString(x,    y, text, colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
-	cgi_SP_GetStringTextString( "SP_INGAME_SECRETAREAS_OF", text, sizeof(text) );
-	cgi_R_Font_DrawString(x+w,  y, va("%d %s %d",
-										cg_entities[0].gent->client->sess.missionStats.secretsFound,
-										text,
-										cg_entities[0].gent->client->sess.missionStats.totalSecrets
-										),
-							colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
+	y = 86;
+	cgi_SP_GetStringTextString( "SP_INGAME_SECRETAREAS_OF", of, sizeof(of) );
+	CG_MissionCompletionLine( x, y, "SP_INGAME_SECRETAREAS", va("%d %s %d", stats.secretsFound, of, stats.totalSecrets) );
 
-	y +=pad;
-	cgi_SP_GetStringTextString( "SP_INGAME_ENEMIESKILLED", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
-	cgi_R_Font_DrawString(x, y, text, colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
-	cgi_R_Font_DrawString(x+w,y, va("%d",cg_entities[0].gent->client->sess.missionStats.enemiesKilled), colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
-	/*
-	cgi_SP_GetStringTextString( "SP_INGAME_SECRETAREAS_OF", text, sizeof(text) );
-	cgi_R_Font_DrawString(x+w,y, va("%d %s %d",
-										cg_entities[0].gent->client->sess.missionStats.enemiesKilled,
-										text,
-										cg_entities[0].gent->client->sess.missionStats.enemiesSpawned
-										),
-							colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
-	*/
+	y += pad;
+	CG_MissionCompletionLine( x, y, "SP_INGAME_ENEMIESKILLED", va("%d", stats.enemiesKilled) );
 
-	y +=pad;
-	y +=pad;
-	cgi_SP_GetStringTextString( "SP_INGAME_FAVORITEWEAPON", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
-	cgi_R_Font_DrawString(x, y, text, colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
-
+	// the weapon fired the most (none shown if nothing was)
 	int wpn=0,i;
-	int max_wpn = cg_entities[0].gent->client->sess.missionStats.weaponUsed[0];
+	int max_wpn = stats.weaponUsed[0];
 	for (i = 1; i<WP_NUM_WEAPONS; i++)
 	{
-		if (cg_entities[0].gent->client->sess.missionStats.weaponUsed[i] > max_wpn)
+		if (stats.weaponUsed[i] > max_wpn)
 		{
-			max_wpn = cg_entities[0].gent->client->sess.missionStats.weaponUsed[i];
+			max_wpn = stats.weaponUsed[i];
 			wpn = i;
 		}
 	}
-
-	if ( wpn )
-	{
-		gitem_t	*wItem= FindItemForWeapon( (weapon_t)wpn);
-		cgi_SP_GetStringTextString( va("SP_INGAME_%s",wItem->classname ), text, sizeof( text ));
-	//	cgi_R_Font_DrawString(x+w, y, va("%d",wpn), colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
-		cgi_R_Font_DrawString(x+w, y, text, colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
+	if ( G_IsOutcastCampaign() )
+	{// its story gives the player Jedi Academy's pistol and melee in place of its Bryar pistol and
+	 // stun baton (G_Outcast_PlayerWeapon): name them as Jedi Outcast did
+		if ( wpn == WP_BLASTER_PISTOL )
+		{
+			wpn = WP_BRYAR_PISTOL;
+		}
+		else if ( wpn == WP_MELEE )
+		{
+			wpn = WP_STUN_BATON;
+		}
 	}
+	text[0] = '\0';
+	const gitem_t *wItem = wpn ? FindItemForWeapon( (weapon_t)wpn ) : NULL;
+	if ( wItem && wItem->classname )
+	{
+		cgi_SP_GetStringTextString( va("SP_INGAME_%s",wItem->classname ), text, sizeof( text ));
+	}
+	y += pad;
+	y += pad;
+	CG_MissionCompletionLine( x, y, "SP_INGAME_FAVORITEWEAPON", text );
 
 	x = 334+70;
 	y = 86;
-	cgi_SP_GetStringTextString( "SP_INGAME_SHOTSFIRED", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
-	cgi_R_Font_DrawString(x, y, text, colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
-	cgi_R_Font_DrawString(x+w, y, va("%d",cg_entities[0].gent->client->sess.missionStats.shotsFired), colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
+	CG_MissionCompletionLine( x, y, "SP_INGAME_SHOTSFIRED", va("%d", stats.shotsFired) );
 
+	y += pad;
+	CG_MissionCompletionLine( x, y, "SP_INGAME_HITS", va("%d", stats.hits) );
 
-	y +=pad;
-	cgi_SP_GetStringTextString( "SP_INGAME_HITS", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
-	cgi_R_Font_DrawString(x, y, text, colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
-	cgi_R_Font_DrawString(x+w, y, va("%d",cg_entities[0].gent->client->sess.missionStats.hits), colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
+	y += pad;
+	const float percent = stats.shotsFired? 100.0f * (float)stats.hits / stats.shotsFired : 0;
+	CG_MissionCompletionLine( x, y, "SP_INGAME_ACCURACY", va("%.2f%%", percent) );
 
-
-	y +=pad;
-	cgi_SP_GetStringTextString( "SP_INGAME_ACCURACY", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
-	cgi_R_Font_DrawString(x, y, text, colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
-	const float percent = cg_entities[0].gent->client->sess.missionStats.shotsFired? 100.0f * (float)cg_entities[0].gent->client->sess.missionStats.hits / cg_entities[0].gent->client->sess.missionStats.shotsFired : 0;
-	cgi_R_Font_DrawString(x+w, y, va("%.2f%%",percent), colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
-
-	if ( cg_entities[0].gent->client->sess.missionStats.weaponUsed[WP_SABER] <= 0 )
+	if ( stats.weaponUsed[WP_SABER] <= 0 )
 	{
 		return; //don't have saber yet, so don't print any stats
 	}
-//first column, FORCE POWERS
-	y =180;
-	cgi_SP_GetStringTextString( "SP_INGAME_FORCEUSE", text, sizeof(text) );
-	cgi_R_Font_DrawString(x, y, text, colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
-
-	y +=pad;
-	cgi_SP_GetStringTextString( "SP_INGAME_HEAL", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
-	cgi_R_Font_DrawString(x,   y, text, colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
-	cgi_R_Font_DrawString(x+w, y, va("%d",cg_entities[0].gent->client->sess.missionStats.forceUsed[FP_HEAL]), colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
-
-	y +=pad;
-	cgi_SP_GetStringTextString( "SP_INGAME_SPEED", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
-	cgi_R_Font_DrawString(x,   y, text, colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
-	cgi_R_Font_DrawString(x+w, y, va("%d",cg_entities[0].gent->client->sess.missionStats.forceUsed[FP_SPEED]), colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
-
-	y +=pad;
-	cgi_SP_GetStringTextString( "SP_INGAME_PULL", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
-	cgi_R_Font_DrawString(x,   y, text, colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
-	cgi_R_Font_DrawString(x+w, y, va("%d",cg_entities[0].gent->client->sess.missionStats.forceUsed[FP_PULL]), colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
-
-	y +=pad;
-	cgi_SP_GetStringTextString( "SP_INGAME_PUSH", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
-	cgi_R_Font_DrawString(x,   y, text, colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
-	cgi_R_Font_DrawString(x+w, y, va("%d",cg_entities[0].gent->client->sess.missionStats.forceUsed[FP_PUSH]), colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
-
-	y +=pad;
-	cgi_SP_GetStringTextString("SP_INGAME_MINDTRICK", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
-	cgi_R_Font_DrawString(x,   y, text, colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
-	cgi_R_Font_DrawString(x+w, y, va("%d",cg_entities[0].gent->client->sess.missionStats.forceUsed[FP_TELEPATHY]), colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
-
-	y +=pad;
-	cgi_SP_GetStringTextString( "SP_INGAME_GRIP", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
-	cgi_R_Font_DrawString(x,   y, text, colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
-	cgi_R_Font_DrawString(x+w, y, va("%d",cg_entities[0].gent->client->sess.missionStats.forceUsed[FP_GRIP]), colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
-
-	y +=pad;
-	cgi_SP_GetStringTextString( "SP_INGAME_LIGHTNING", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
-	cgi_R_Font_DrawString(x,   y, text, colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
-	cgi_R_Font_DrawString(x+w, y, va("%d",cg_entities[0].gent->client->sess.missionStats.forceUsed[FP_LIGHTNING]), colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
-
-//second column, LIGHT SABER
+	// the Force powers Jedi Outcast has, under the right column
 	y = 180;
+	CG_MissionCompletionHeading( x, y, "SP_INGAME_FORCEUSE" );
+	y += pad;
+	CG_MissionCompletionLine( x, y, "SP_INGAME_HEAL", va("%d", stats.forceUsed[FP_HEAL]) );
+	y += pad;
+	CG_MissionCompletionLine( x, y, "SP_INGAME_SPEED", va("%d", stats.forceUsed[FP_SPEED]) );
+	y += pad;
+	CG_MissionCompletionLine( x, y, "SP_INGAME_PULL", va("%d", stats.forceUsed[FP_PULL]) );
+	y += pad;
+	CG_MissionCompletionLine( x, y, "SP_INGAME_PUSH", va("%d", stats.forceUsed[FP_PUSH]) );
+	y += pad;
+	CG_MissionCompletionLine( x, y, "SP_INGAME_MINDTRICK", va("%d", stats.forceUsed[FP_TELEPATHY]) );
+	y += pad;
+	CG_MissionCompletionLine( x, y, "SP_INGAME_GRIP", va("%d", stats.forceUsed[FP_GRIP]) );
+	y += pad;
+	CG_MissionCompletionLine( x, y, "SP_INGAME_LIGHTNING", va("%d", stats.forceUsed[FP_LIGHTNING]) );
+
+	// the lightsaber, under the left column
 	x = 140;
-	cgi_SP_GetStringTextString( "SP_INGAME_LIGHTSABERUSE", text, sizeof(text) );
-	cgi_R_Font_DrawString(x, y, text, colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
-
-	y +=pad;
-	cgi_SP_GetStringTextString( "SP_INGAME_THROWN", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
-	cgi_R_Font_DrawString(x,   y, text, colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
-	cgi_R_Font_DrawString(x+w, y, va("%d",cg_entities[0].gent->client->sess.missionStats.saberThrownCnt), colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
-
-	y +=pad;
-	cgi_SP_GetStringTextString( "SP_INGAME_BLOCKS", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
-	cgi_R_Font_DrawString(x,   y, text, colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
-	cgi_R_Font_DrawString(x+w, y, va("%d",cg_entities[0].gent->client->sess.missionStats.saberBlocksCnt), colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
-
-	y +=pad;
-	cgi_SP_GetStringTextString( "SP_INGAME_LEGATTACKS", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
-	cgi_R_Font_DrawString(x,   y, text, colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
-	cgi_R_Font_DrawString(x+w, y, va("%d",cg_entities[0].gent->client->sess.missionStats.legAttacksCnt), colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
-
-	y +=pad;
-	cgi_SP_GetStringTextString( "SP_INGAME_ARMATTACKS", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
-	cgi_R_Font_DrawString(x,   y, text, colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
-	cgi_R_Font_DrawString(x+w, y, va("%d",cg_entities[0].gent->client->sess.missionStats.armAttacksCnt), colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
-
-	y +=pad;
-	cgi_SP_GetStringTextString( "SP_INGAME_BODYATTACKS", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
-	cgi_R_Font_DrawString(x,   y, text, colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
-	cgi_R_Font_DrawString(x+w, y, va("%d",cg_entities[0].gent->client->sess.missionStats.torsoAttacksCnt), colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
-
-	y +=pad;
-	cgi_SP_GetStringTextString( "SP_INGAME_OTHERATTACKS", text, sizeof(text) );
-w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 0.8f);
-	cgi_R_Font_DrawString(x,   y, text, colorTable[CT_LTGOLD1], cgs.media.qhFontSmall, -1, 0.8f);
-	cgi_R_Font_DrawString(x+w, y, va("%d",cg_entities[0].gent->client->sess.missionStats.otherAttacksCnt), colorTable[CT_WHITE], cgs.media.qhFontSmall, -1, 0.8f);
+	y = 180;
+	CG_MissionCompletionHeading( x, y, "SP_INGAME_LIGHTSABERUSE" );
+	y += pad;
+	CG_MissionCompletionLine( x, y, "SP_INGAME_THROWN", va("%d", stats.saberThrownCnt) );
+	y += pad;
+	CG_MissionCompletionLine( x, y, "SP_INGAME_BLOCKS", va("%d", stats.saberBlocksCnt) );
+	y += pad;
+	CG_MissionCompletionLine( x, y, "SP_INGAME_LEGATTACKS", va("%d", stats.legAttacksCnt) );
+	y += pad;
+	CG_MissionCompletionLine( x, y, "SP_INGAME_ARMATTACKS", va("%d", stats.armAttacksCnt) );
+	y += pad;
+	CG_MissionCompletionLine( x, y, "SP_INGAME_BODYATTACKS", va("%d", stats.torsoAttacksCnt) );
+	y += pad;
+	CG_MissionCompletionLine( x, y, "SP_INGAME_OTHERATTACKS", va("%d", stats.otherAttacksCnt) );
 }
-*/
-#endif
 
 /*
 =================
