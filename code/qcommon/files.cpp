@@ -1941,9 +1941,9 @@ long FS_ReadOutcastFile( const char *qpath, void **buffer ) {
 static qboolean	fs_outcastInterface;	// Jedi Outcast's interface is on, see FS_SetOutcastInterface
 
 // The folders of what the interface is made of, that both games have files of the same names in:
-// the menus, their pictures, and the sounds of the buttons
+// the menus, their pictures, the HUD's pictures, and the sounds of the buttons
 static qboolean FS_IsOutcastInterfaceFile( const char *filename ) {
-	static const char *const folders[] = { "ui/", "menu/", "gfx/menus/", "sound/interface/" };
+	static const char *const folders[] = { "ui/", "menu/", "gfx/menus/", "gfx/hud/", "sound/interface/" };
 
 	for ( size_t i = 0; i < ARRAY_LEN( folders ); i++ ) {
 		if ( !Q_stricmpn( filename, folders[i], (int)strlen( folders[i] ) ) ) {

@@ -1494,6 +1494,7 @@ static void CG_RegisterGraphics( void ) {
 
 	}
 
+	CG_RegisterOutcastHUD();	// (Jedi Outcast's HUD art, when its interface is on)
 
 	memset( cg_items, 0, sizeof( cg_items ) );
 	memset( cg_weapons, 0, sizeof( cg_weapons ) );
@@ -2873,6 +2874,12 @@ qboolean CG_Load_Menu( const char **p)
 	return qfalse;
 }
 
+// The HUD of the interface that is on: Jedi Outcast's menus have their own (cg_outcasthud.cpp)
+static const char *CG_DefaultHudFile( void )
+{
+	return G_OutcastInterface() ? "ui/jk2hud.txt" : "ui/jahud.txt";
+}
+
 /*
 =================
 CG_LoadMenus();
@@ -2897,7 +2904,7 @@ void CG_LoadMenus(const char *menuFile)
 		else
 			CG_Printf( S_COLOR_YELLOW "hud menu file not found: %s, using default\n", menuFile );
 
-		len = cgi_FS_FOpenFile( "ui/jahud.txt", &f, FS_READ );
+		len = cgi_FS_FOpenFile( CG_DefaultHudFile(), &f, FS_READ );
 		if (!f)
 		{
 			cgi_Error( S_COLOR_RED "default menu file not found: ui/hud.txt, unable to continue!\n" );
@@ -3012,9 +3019,9 @@ void CG_LoadHudMenu(void)
 //	cgi_UI_Menu_Reset();
 
 	hudSet = cg_hudFiles.string;
-	if (hudSet[0] == '\0')
-	{
-		hudSet = "ui/jahud.txt";
+	if (hudSet[0] == '\0' || !Q_stricmp( hudSet, "ui/jahud.txt" ) || !Q_stricmp( hudSet, "ui/jk2hud.txt" ))
+	{	// (either game's own HUD: the one of the interface that is on)
+		hudSet = CG_DefaultHudFile();
 	}
 
 	CG_LoadMenus(hudSet);

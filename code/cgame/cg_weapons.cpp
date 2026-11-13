@@ -1716,6 +1716,12 @@ Draw the proper background graphic for the icons being displayed on the datapad
 */
 void CG_DrawDataPadIconBackground(const int backgroundType)
 {
+	if ( G_OutcastInterface() )
+	{	// (Jedi Outcast's menus keep its bar and prongs behind the icons)
+		CG_DrawOutcastDataPadIconBackground( backgroundType );
+		return;
+	}
+
 //	const int		graphicXPos = 40;
 //	const int		graphicYPos = 340;
 //	const short		graphicHeight = 60;

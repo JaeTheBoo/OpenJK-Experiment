@@ -673,6 +673,7 @@ void CG_UpdateCvars( void );
 
 int CG_CrosshairPlayer( void );
 void CG_LoadMenus(const char *menuFile);
+void CG_LoadHudMenu(void);
 
 //
 // cg_view.c
@@ -878,6 +879,17 @@ void CG_ProcessSnapshots( void );
 // cg_info.c
 //
 void CG_DrawInformation( void );
+
+//
+// cg_outcasthud.cpp (Jedi Outcast's HUD, while its interface is on)
+//
+void CG_RegisterOutcastHUD( void );
+void CG_DrawOutcastHUD( centity_t *cent );
+void CG_DrawOutcastDataPadHUD( centity_t *cent );
+qboolean CG_DrawOutcastCustomHud( const centity_t *cent );
+void CG_DrawOutcastIconBackground( void );
+void CG_DrawOutcastDataPadIconBackground( const int backgroundType );
+void CG_DrawOutcastDataPadUpdated( void );
 
 //
 // cg_scoreboard.c

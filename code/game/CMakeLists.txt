@@ -223,6 +223,7 @@ set(SPGameCGameFiles
 	"${SPDir}/cgame/cg_localents.cpp"
 	"${SPDir}/cgame/cg_main.cpp"
 	"${SPDir}/cgame/cg_marks.cpp"
+	"${SPDir}/cgame/cg_outcasthud.cpp"
 	"${SPDir}/cgame/cg_players.cpp"
 	"${SPDir}/cgame/cg_playerstate.cpp"
 	"${SPDir}/cgame/cg_predict.cpp"

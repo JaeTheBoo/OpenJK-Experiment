@@ -29,6 +29,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "cg_media.h"
 #include "../game/objectives.h"
 #include "../game/g_vehicles.h"
+#include "../game/g_outcast.h"
 
 extern vmCvar_t	cg_debugHealthBars;
 
@@ -1519,6 +1520,12 @@ static qboolean CG_DrawCustomHealthHud( centity_t *cent )
 {
 	Vehicle_t *pVeh;
 
+	// Jedi Outcast's menus: its bars for an emplaced gun, an AT-ST and a panel turret
+	if ( G_OutcastInterface() && CG_DrawOutcastCustomHud( cent ) )
+	{
+		return qfalse; // drew this hud, so don't draw the player one
+	}
+
 	// In a Weapon?
 	if (( cent->currentState.eFlags & EF_LOCKED_TO_WEAPON ))
 	{
@@ -1854,6 +1861,12 @@ static void CG_DrawHUD( centity_t *cent )
 		return;
 	}
 
+	if ( G_OutcastInterface() )
+	{	// Jedi Outcast's menus have its own HUD
+		CG_DrawOutcastHUD( cent );
+		return;
+	}
+
 	// Draw the lower left section of the HUD (stuck to the left edge of the screen)
 	if (cgi_UI_GetMenuInfo("lefthud",&sectionXPos,&sectionYPos,&sectionWidth,&sectionHeight))
 	{
@@ -1982,11 +1995,15 @@ CG_DrawDataPadHUD
 void CG_DrawDataPadHUD( centity_t *cent )
 {
 	int x,y;
+	const qboolean outcastLayout = G_OutcastInterface();	// (Jedi Outcast's menus: its HUD's dials)
 
 	x = 34;
 	y = 286;
 
-	CG_DrawHealth(x,y,80,80);
+	if ( !outcastLayout )
+	{
+		CG_DrawHealth(x,y,80,80);
+	}
 
 	x = 526;
 
@@ -2012,6 +2029,12 @@ void CG_DrawDataPadHUD( centity_t *cent )
 			}
 		}
 //		CG_ClearDataPadCvars();
+	}
+
+	if ( outcastLayout )
+	{
+		CG_DrawOutcastDataPadHUD( cent );
+		return;
 	}
 
 	CG_DrawForcePower(cent,x,y);
@@ -4038,6 +4061,10 @@ static void CG_Draw2D( void )
 		{
 			//CG_DrawIconBackground();
 		}
+		if ( G_OutcastInterface() && !(cent->gent && cent->gent->s.eFlags & (EF_LOCKED_TO_WEAPON|EF_IN_ATST)) )
+		{	// (Jedi Outcast's menus: its bar behind the icons being chosen)
+			CG_DrawOutcastIconBackground();
+		}
 
 		CG_DrawWeaponSelect();
 
@@ -4122,13 +4149,20 @@ static void CG_Draw2D( void )
 				CG_ClearDataPadCvars();
 			}
 
-			cgi_SP_GetStringTextString( "SP_INGAME_NEW_OBJECTIVE_INFO", text, sizeof(text) );
+			if ( G_OutcastInterface() )
+			{	// (Jedi Outcast's menus: its note, under the middle of the screen)
+				CG_DrawOutcastDataPadUpdated();
+			}
+			else
+			{
+				cgi_SP_GetStringTextString( "SP_INGAME_NEW_OBJECTIVE_INFO", text, sizeof(text) );
 
-			int x_pos = 0;
-			y_pos = 20;
-			w = cgi_R_Font_StrLenPixels(text,cgs.media.qhFontMedium, 1.0f);
-			x_pos = (SCREEN_WIDTH/2)-(w/2);
-			cgi_R_Font_DrawString(x_pos, y_pos, text,  colorTable[CT_LTRED1], cgs.media.qhFontMedium, -1, 1.0f);
+				int x_pos = 0;
+				y_pos = 20;
+				w = cgi_R_Font_StrLenPixels(text,cgs.media.qhFontMedium, 1.0f);
+				x_pos = (SCREEN_WIDTH/2)-(w/2);
+				cgi_R_Font_DrawString(x_pos, y_pos, text,  colorTable[CT_LTRED1], cgs.media.qhFontMedium, -1, 1.0f);
+			}
 		}
 	}
 
