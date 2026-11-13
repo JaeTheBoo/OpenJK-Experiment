@@ -316,7 +316,15 @@ void SV_LoadTransition_f(void)
 	SV_Player_EndOfLevelSave();
 
 	//Save the full current state of the current map so we can return to it later
+#ifdef JK2_MODE
 	SG_WriteSavegame( va("hub/%s", sv_mapname->string), qfalse );
+#else
+	// (with a picture of the level being left, as it is on the screen now)
+	if ( SG_WriteSavegame( va("hub/%s", sv_mapname->string), qfalse ) )
+	{
+		SG_WriteSaveImage( va("hub/%s", sv_mapname->string) );
+	}
+#endif
 
 	//set the spawntarget if there is one
 	spawntarget = Cmd_Argv(2);

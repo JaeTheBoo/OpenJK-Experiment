@@ -97,10 +97,8 @@ typedef struct {
 	// force a screen update, only used during gamestate load
 	void		(*UpdateScreen)( void );
 
-#ifdef JK2_MODE
 	// stuff for savegame screenshots...
 	void		(*PrecacheScreenshot)( void );
-#endif
 
 	//========= model collision ===============
 
@@ -118,9 +116,7 @@ typedef struct {
 
 	// =========== getting save game picture ===============
 	void	(*DrawStretchRaw) (int x, int y, int w, int h, int cols, int rows, const byte *data, int client, qboolean dirty);
-#ifdef JK2_MODE
 	qboolean(*SG_GetSaveImage)( const char *psPathlessBaseName, void *pvAddress );
-#endif
 	int		(*SG_GetSaveGameComment)(const char *psPathlessBaseName, char *sComment, char *sMapName);
 	qboolean (*SG_GameAllowedToSaveHere)(qboolean inCamera);
 	void (*SG_StoreSaveGameComment)(const char *sComment);

@@ -408,9 +408,7 @@ UI_SaveMenu_f
 */
 static void UI_SaveMenu_f( void )
 {
-#ifdef JK2_MODE
-	ui.PrecacheScreenshot();
-#endif
+	ui.PrecacheScreenshot();	// (the picture of the game saved: the game before the menu covers it)
 
 	trap_Key_SetCatcher( KEYCATCH_UI );
 	Menus_ActivateByName("ingamesaveMenu");

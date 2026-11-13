@@ -80,6 +80,10 @@ static struct
 
 #ifdef JK2_MODE
 byte screenShotBuf[SG_SCR_WIDTH * SG_SCR_HEIGHT * 4];
+#else
+// The picture of the saved game chosen in Jedi Outcast's load and save menus, when it has one (see SG_GetSaveImage)
+static byte screenShotBuf[SG_SCR_WIDTH * SG_SCR_HEIGHT * 4];
+static qboolean screenShotValid = qfalse;
 #endif
 
 typedef struct
@@ -1993,6 +1997,9 @@ static void UI_StopCinematic(int handle)
 static void UI_HandleLoadSelection()
 {
 	Cvar_Set("ui_SelectionOK", va("%d",(s_savegame.currentLine < s_savegame.saveFileCnt)) );
+#ifndef JK2_MODE
+	screenShotValid = qfalse;
+#endif
 	if (s_savegame.currentLine >= s_savegame.saveFileCnt)
 		return;
 #ifdef JK2_MODE
@@ -2004,8 +2011,9 @@ static void UI_HandleLoadSelection()
 	}
 #else
 	if ( UI_OutcastStyle() )
-	{//Jedi Outcast's load and save menus show the comment of the chosen game in a field of its own
+	{//Jedi Outcast's load and save menus show the comment of the chosen game in a field of its own, and its picture
 		Cvar_Set("ui_gameDesc", s_savedata[s_savegame.currentLine].currentSaveFileComments );
+		screenShotValid = ui.SG_GetSaveImage( s_savedata[s_savegame.currentLine].currentSaveFileName, screenShotBuf );
 	}
 #endif
 }
@@ -4101,11 +4109,14 @@ static void UI_OwnerDraw(float x, float y, float w, float h, float text_x, float
 			levelshot = ui.R_RegisterShaderNoMip( va( "levelshots/%s", s_savedata[s_savegame.currentLine].currentSaveFileMap ) );
 #ifdef JK2_MODE
 			if (screenShotBuf[0])
+#else
+			// (the picture of the chosen game, in Jedi Outcast's menus; a game saved without one shows its level's)
+			if (screenShotValid && UI_OutcastStyle())
+#endif
 			{
 				ui.DrawStretchRaw( x, y, w, h, SG_SCR_WIDTH, SG_SCR_HEIGHT, screenShotBuf, 0, qtrue );
 			}
 			else
-#endif
 			if (levelshot)
 			{
 				ui.R_DrawStretchPic( x, y, w, h, 0, 0, 1, 1, levelshot );
@@ -4374,9 +4385,8 @@ UI_InGameMenu
 */
 void UI_InGameMenu(const char*menuID)
 {
-#ifdef JK2_MODE
+	// (the picture a game saved from these menus gets: the game as it is, before the menu is drawn over it)
 	ui.PrecacheScreenshot();
-#endif
 	Menus_CloseByName("mainhud");
 
 #ifndef JK2_MODE
@@ -6808,6 +6818,8 @@ void ReadSaveDirectory (void)
 	Cvar_Set("ui_SelectionOK", "0" );
 #ifdef JK2_MODE
 	memset( screenShotBuf,0,(SG_SCR_WIDTH * SG_SCR_HEIGHT * 4)); //blank out sshot
+#else
+	screenShotValid = qfalse;
 #endif
 
 

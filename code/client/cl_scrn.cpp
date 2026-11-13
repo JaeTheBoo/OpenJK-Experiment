@@ -404,6 +404,14 @@ void UI_SetActiveMenu( const char* menuname,const char *menuID );
 void _UI_Refresh( int realtime );
 void UI_DrawConnect( const char *servername, const char * updateInfoString );
 
+#ifndef JK2_MODE
+// The picture of a saved game (the server keeps it next to the save, Jedi Outcast's load and save menus show it) is the
+// game as the player last saw it: taken when the in-game menu opens, before the menu is drawn over the view, or at the
+// save itself when nothing covers the game. It only stands for the game until the game is on the screen again.
+static qboolean scr_lastFrameShowedGame = qfalse;	// the last frame drawn was the game, with no menu or console over it
+static qboolean scr_screenshotCurrent = qfalse;		// bScreenData still shows the game as it is now
+#endif
+
 /*
 ==================
 SCR_DrawScreenField
@@ -469,6 +477,17 @@ void SCR_DrawScreenField( stereoFrame_t stereoFrame ) {
 	if ( cl_debuggraph->integer || cl_timegraph->integer ) {
 		SCR_DrawDebugGraph ();
 	}
+
+#ifndef JK2_MODE
+	// A saved game's picture can only be taken of a frame of the game (SCR_PrecacheScreenshot), and the one taken
+	// before no longer shows the game once a new frame of it is drawn.
+	scr_lastFrameShowedGame = ( cls.state == CA_ACTIVE && !uiFullscreen && !Key_GetCatcher()
+		&& !CL_IsRunningInGameCinematic() && !CL_InGameCinematicOnStandBy() ) ? qtrue : qfalse;
+	if ( scr_lastFrameShowedGame )
+	{
+		scr_screenshotCurrent = qfalse;
+	}
+#endif
 }
 
 /*
@@ -541,6 +560,14 @@ void SCR_PrecacheScreenshot()
 		return;
 	}
 
+#ifndef JK2_MODE
+	// (the last frame was not the game: a video, the loading screen, a menu or the console)
+	if ( !scr_lastFrameShowedGame )
+	{
+		return;
+	}
+#endif
+
 	if (!Key_GetCatcher( ))
 	{
 		// in-game...
@@ -550,9 +577,28 @@ void SCR_PrecacheScreenshot()
 		S_ClearSoundBuffer();	// clear DMA etc because the following glReadPixels() call can take ages
 		re.GetScreenShot( (byte *) &bScreenData, SG_SCR_WIDTH, SG_SCR_HEIGHT);
 		screenDataValid = qtrue;
+#ifndef JK2_MODE
+		scr_screenshotCurrent = qtrue;
+#endif
 	}
 
 }
+
+#ifndef JK2_MODE
+/*
+==================
+SCR_GetSaveGameScreenshot
+
+The picture for a game being saved now (SG_SCR_WIDTH x SG_SCR_HEIGHT RGBA, top row first), or NULL when there is none
+that shows it: saved from the console, or with nothing of the game drawn since the level started.
+==================
+*/
+const byte *SCR_GetSaveGameScreenshot( void )
+{
+	SCR_PrecacheScreenshot();	// (a new one, if the game is on the screen with nothing over it)
+	return ( screenDataValid && scr_screenshotCurrent ) ? bScreenData : NULL;
+}
+#endif
 
 // Returns a SG_SCR_WIDTH x SG_SCR_HEIGHT screenshot buffer
 // Must match color components with DrawStretchRaw: 4

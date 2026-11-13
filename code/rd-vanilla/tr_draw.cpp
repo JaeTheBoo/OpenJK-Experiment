@@ -189,23 +189,36 @@ void RE_GetScreenShot(byte *buffer, int w, int h)
 	float		xScale, yScale;
 	int			xx, yy;
 
+	int			readX = 0, readY = 0, readWidth = glConfig.vidWidth, readHeight = glConfig.vidHeight;
+#ifndef JK2_MODE
+	// Saved game pictures are shown in Jedi Outcast's 4:3 frames: take the middle 4:3 of a screen of another shape (the
+	// shape of the 640x480 area the menus are laid out in) rather than squeezing all of it in
+	if ( readWidth * 3 > readHeight * 4 ) {
+		readWidth = readHeight * 4 / 3;
+		readX = ( glConfig.vidWidth - readWidth ) / 2;
+	} else if ( readWidth * 3 < readHeight * 4 ) {
+		readHeight = readWidth * 3 / 4;
+		readY = ( glConfig.vidHeight - readHeight ) / 2;
+	}
+#endif
 
-	source = RB_ReadPixels(0, 0, glConfig.vidWidth, glConfig.vidHeight, &offset, &padlen);
-	memcount = (glConfig.vidWidth * 3 + padlen) * glConfig.vidHeight;
+	source = RB_ReadPixels(readX, readY, readWidth, readHeight, &offset, &padlen);
+	memcount = (readWidth * 3 + padlen) * readHeight;
 
 	// gamma correct
 	if(glConfig.deviceSupportsGamma)
 		R_GammaCorrect(source + offset, memcount);
 
 	// resample from source
-	xScale = glConfig.vidWidth / (4.0*w);
-	yScale = glConfig.vidHeight / (3.0*h);
+	xScale = readWidth / (4.0*w);
+	yScale = readHeight / (3.0*h);
 	for ( y = 0 ; y < h ; y++ ) {
 		for ( x = 0 ; x < w ; x++ ) {
 			r = g = b = 0;
 			for ( yy = 0 ; yy < 3 ; yy++ ) {
 				for ( xx = 0 ; xx < 4 ; xx++ ) {
-					src = source + offset + 3 * ( glConfig.vidWidth * (int)( (y*3+yy)*yScale ) + (int)( (x*4+xx)*xScale ) );
+					// (rows are padded to the pack alignment)
+					src = source + offset + ( readWidth * 3 + padlen ) * (int)( (y*3+yy)*yScale ) + 3 * (int)( (x*4+xx)*xScale );
 					r += src[0];
 					g += src[1];
 					b += src[2];

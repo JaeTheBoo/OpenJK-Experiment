@@ -303,6 +303,9 @@ qboolean SV_TryLoadTransition( const char *mapname );
 qboolean SG_WriteSavegame(const char *psPathlessBaseName, qboolean qbAutosave);
 qboolean SG_ReadSavegame(const char *psPathlessBaseName);
 void SG_WipeSavegame(const char *psPathlessBaseName);
+#ifndef JK2_MODE
+void SG_WriteSaveImage(const char *psPathlessBaseName);	// the picture of the game just saved, see sv_savegame.cpp
+#endif
 qboolean SG_Append(unsigned int chid, const void *data, int length);
 int SG_Read			(unsigned int chid, void *pvAddress, int iLength, void **ppvAddressPtr = NULL);
 int SG_ReadOptional	(unsigned int chid, void *pvAddress, int iLength, void **ppvAddressPtr = NULL);

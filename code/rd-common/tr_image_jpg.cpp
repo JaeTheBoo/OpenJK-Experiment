@@ -309,6 +309,32 @@ bool R_DecodeJPGFromMemory( const byte *buffer, size_t length, byte **pic, int *
 	return true;
 }
 
+/*
+=================
+RE_DecodeJPGToBuffer
+
+A JPEG the engine has read (the picture of a saved game) decoded into its width x height RGBA buffer, top row first.
+A damaged file, or one of another size, leaves the buffer alone and returns qfalse.
+=================
+*/
+qboolean RE_DecodeJPGToBuffer( const byte *data, size_t length, byte *pic, int width, int height )
+{
+	byte *decoded = NULL;
+	int decodedWidth = 0, decodedHeight = 0;
+
+	if ( !data || !length || !pic || !R_DecodeJPGFromMemory( data, length, &decoded, &decodedWidth, &decodedHeight ) )
+	{
+		return qfalse;
+	}
+	const qboolean fits = ( decodedWidth == width && decodedHeight == height ) ? qtrue : qfalse;
+	if ( fits )
+	{
+		memcpy( pic, decoded, (size_t)width * height * 4 );
+	}
+	free( decoded );
+	return fits;
+}
+
 #ifdef JK2_MODE
 void LoadJPGFromBuffer( byte *inputBuffer, size_t len, unsigned char **pic, int *width, int *height ) {
 	/* This struct contains the JPEG decompression parameters and pointers to

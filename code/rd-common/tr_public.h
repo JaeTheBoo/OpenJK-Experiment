@@ -223,10 +223,13 @@ typedef struct {
 	// for use with save-games mainly...
 	void	(*GetScreenShot)(byte *data, int w, int h);
 
-#ifdef JK2_MODE
 	size_t	(*SaveJPGToBuffer)(byte *buffer, size_t bufSize, int quality, int image_width, int image_height, byte *image_buffer, int padding, bool flip_vertical );
+#ifdef JK2_MODE
 	void	(*LoadJPGFromBuffer)( byte *inputBuffer, size_t len, byte **pic, int *width, int *height );
 #endif
+	// Decodes a JPEG held in memory into the caller's width x height RGBA picture, top row first; qfalse if the data
+	// is damaged or of another size (a saved game's picture, which is a file of its own in Academy's engine)
+	qboolean (*DecodeJPGToBuffer)( const byte *data, size_t length, byte *pic, int width, int height );
 
 	// this is so you can get access to raw pixels from a graphics format (TGA/JPG/BMP etc),
 	//	currently only the save game uses it (to make raw shots for the autosaves)

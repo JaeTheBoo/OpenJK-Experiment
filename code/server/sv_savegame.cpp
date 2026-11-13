@@ -109,11 +109,35 @@ static const char *GetString_FailedToOpenSaveGame(const char *psFilename, qboole
 	return sTemp;
 }
 
+#ifndef JK2_MODE
+// Jedi Outcast's saved games hold a picture of the game (chunks SHLN, SHOT). Academy's format has none, and an older
+// save's reader can't skip a chunk it doesn't know, so here the picture is a file of its own next to the save:
+// saves/<name>.jpg, written when the game saves (in either interface) and shown by Jedi Outcast's load and save menus.
+static const char *SG_SaveImagePath(const char *psPathlessBaseName)
+{
+	static char sPath[MAX_QPATH];
+
+	// (named like the save itself, see ojk::SavedGame::generate_path: "hub/<map>" is saves/hub_<map>.sav)
+	Com_sprintf(sPath, sizeof(sPath), "saves/%s.jpg", psPathlessBaseName);
+	for (char *p = sPath + strlen("saves/"); *p; p++)
+	{
+		if (*p == '/')
+		{
+			*p = '_';
+		}
+	}
+	return sPath;
+}
+#endif
+
 void SG_WipeSavegame(
 	const char* psPathlessBaseName)
 {
 	ojk::SavedGame::remove(
 		psPathlessBaseName);
+#ifndef JK2_MODE
+	FS_DeleteUserGenFile(SG_SaveImagePath(psPathlessBaseName));
+#endif
 }
 
 // called from the ERR_DROP stuff just in case the error occured during loading of a saved game, because if
@@ -381,6 +405,9 @@ void SV_SaveGame_f(void)
 #ifdef JK2_MODE
 		Com_Printf (S_COLOR_CYAN "Done.\n");
 #else
+		// (saved from a menu, with the quick save key or at a checkpoint, so there is a picture of it; not when
+		// saved from the console)
+		SG_WriteSaveImage(filename);
 		Com_Printf (S_COLOR_CYAN "%s.\n",SE_GetString("MENUS_DONE"));
 #endif
 	}
@@ -1110,6 +1137,77 @@ static void SG_WriteScreenshot(qboolean qbAutosave, const char *psMapName)
 	Z_Free(pJPGData);
 	SCR_TempRawImage_CleanUp();
 }
+#else
+// Gets the picture of a saved game (SG_SCR_WIDTH x SG_SCR_HEIGHT RGBA, top row first) from its file next to the save;
+// qfalse when it has none (saved before there were pictures, as a level started, or from the console)
+//
+qboolean SG_GetSaveImage(
+	const char* base_name,
+	void* image_ptr)
+{
+	if (!base_name || !image_ptr || !re.DecodeJPGToBuffer)
+	{
+		return qfalse;
+	}
+
+	// (read through a handle: FS_ReadFile would cut the menu's sounds short)
+	fileHandle_t f = 0;
+	const long iLength = FS_FOpenFileRead(SG_SaveImagePath(base_name), &f, qfalse);
+	if (!f)
+	{
+		return qfalse;
+	}
+
+	qboolean bGotIt = qfalse;
+	if (iLength > 0)
+	{
+		byte *pbJPGData = (byte *)Z_Malloc(static_cast<int>(iLength), TAG_TEMP_WORKSPACE, qfalse);
+		if (FS_Read(pbJPGData, static_cast<int>(iLength), f) == iLength)
+		{
+			bGotIt = re.DecodeJPGToBuffer(pbJPGData, static_cast<size_t>(iLength), static_cast<byte *>(image_ptr),
+				SG_SCR_WIDTH, SG_SCR_HEIGHT);
+		}
+		Z_Free(pbJPGData);
+	}
+	FS_FCloseFile(f);
+
+	return bGotIt;
+}
+
+// Writes the picture of the game just saved under this name: the game as the player last saw it (see
+// SCR_GetSaveGameScreenshot). When there is none, the save has no picture (SG_WriteSavegame dropped the old one).
+//
+void SG_WriteSaveImage(const char *psPathlessBaseName)
+{
+	const byte *pbScreenshot = SCR_GetSaveGameScreenshot();
+	if (!pbScreenshot || !re.SaveJPGToBuffer)
+	{
+		return;
+	}
+
+	// the JPEG encoder takes RGB
+	const int iPixels = SG_SCR_WIDTH * SG_SCR_HEIGHT;
+	byte *pbRGB = (byte *)Z_Malloc(iPixels * 3, TAG_TEMP_WORKSPACE, qfalse);
+	for (int i = 0; i < iPixels; i++)
+	{
+		pbRGB[i * 3 + 0] = pbScreenshot[i * 4 + 0];
+		pbRGB[i * 3 + 1] = pbScreenshot[i * 4 + 1];
+		pbRGB[i * 3 + 2] = pbScreenshot[i * 4 + 2];
+	}
+
+	const size_t bufSize = static_cast<size_t>(iPixels) * 4;	// (more than the JPEG can take)
+	byte *pbJPGData = (byte *)Z_Malloc(static_cast<int>(bufSize), TAG_TEMP_WORKSPACE, qfalse);
+	// (flip_vertical true keeps the rows as they are: top first, as an image file has them)
+	const size_t iJPGDataSize = re.SaveJPGToBuffer(pbJPGData, bufSize, JPEG_IMAGE_QUALITY, SG_SCR_WIDTH, SG_SCR_HEIGHT,
+		pbRGB, 0, true);
+	if (iJPGDataSize)
+	{
+		FS_WriteFile(SG_SaveImagePath(psPathlessBaseName), pbJPGData, static_cast<int>(iJPGDataSize));
+	}
+
+	Z_Free(pbJPGData);
+	Z_Free(pbRGB);
+}
 #endif
 
 
@@ -1232,6 +1330,11 @@ qboolean SG_WriteSavegame(const char *psPathlessBaseName, qboolean qbAutosave)
 	ojk::SavedGame::rename(
 		"current",
 		psPathlessBaseName);
+#ifndef JK2_MODE
+	// The picture of the game this one replaced no longer shows it. SG_WriteSaveImage writes the new one for the saves
+	// that get one; the saves made as a level starts come before anything of it is drawn, and get none.
+	FS_DeleteUserGenFile(SG_SaveImagePath(psPathlessBaseName));
+#endif
 
 	sv_testsave->integer = iPrevTestSave;
 	return qtrue;

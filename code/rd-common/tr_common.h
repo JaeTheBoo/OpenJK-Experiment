@@ -69,6 +69,7 @@ void		R_ImagePrefetch_Note( const char *fileName );	// this file was loaded
 void		R_ImagePrefetch_Forget( const char *const *folders, int numFolders );	// what was read from these is stale
 bool		R_DecodeTGAFromMemory( byte *buffer, size_t length, byte **pic, int *width, int *height );
 bool		R_DecodeJPGFromMemory( const byte *buffer, size_t length, byte **pic, int *width, int *height );
+qboolean	RE_DecodeJPGToBuffer( const byte *data, size_t length, byte *pic, int width, int height );
 
 // Load raw image data from TGA image.
 void LoadTGA( const char *name, byte **pic, int *width, int *height );
