@@ -196,6 +196,10 @@ typedef struct windowDesc_s
 		glProfile_t profile;
 		uint32_t contextFlags;
 	} gl;
+
+	// the renderer follows a change of the window's size (WIN_ResizePending): a window (r_fullscreen 0) then has
+	// edges that can be dragged and a maximise button
+	qboolean resizable;
 } windowDesc_t;
 
 typedef struct glconfig_s glconfig_t;
@@ -205,6 +209,15 @@ void		WIN_SetGamma( glconfig_t *glConfig, byte red[256], byte green[256], byte b
 void		WIN_Shutdown( void );
 void *		WIN_GL_GetProcAddress( const char *proc );
 qboolean	WIN_GL_ExtensionSupported( const char *extension );
+
+// When the window's size changed (dragged, maximised, restored), the new size of the picture, once (qfalse while there
+// is none): the client hands it to the renderer at the next frame.
+qboolean	WIN_ResizePending( int *width, int *height );
+// The client's: draws a frame at once when the window's size changes, also while Windows holds the program in its
+// loop for dragging the window's edges (no frame runs then until the mouse button is let go)
+void		WIN_SetResizeRedraw( void (*redraw)( void ) );
+// the size of r_mode's mode (-1: r_customwidth x r_customheight); qfalse for -2 (the desktop's) and unknown modes
+qboolean	R_GetModeInfo( int *width, int *height, int mode );
 
 // Vulkan: the window has to have been created with api == GRAPHICS_API_VULKAN. instance is a VkInstance and
 // surface a VkSurfaceKHR (as untyped pointers so that this header does not need the Vulkan headers).

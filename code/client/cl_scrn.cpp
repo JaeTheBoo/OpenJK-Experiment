@@ -382,6 +382,8 @@ void SCR_DrawDebugGraph (void)
 }
 //=============================================================================
 
+static void SCR_RedrawResized( void );
+
 /*
 ==================
 SCR_Init
@@ -395,6 +397,7 @@ void SCR_Init( void ) {
 	cl_graphshift = Cvar_Get ("graphshift", "0", CVAR_CHEAT);
 
 	scr_initialized = qtrue;
+	WIN_SetResizeRedraw( SCR_RedrawResized );
 }
 
 
@@ -498,15 +501,63 @@ This is called every frame, and can also be called explicitly to flush
 text to the screen.
 ==================
 */
-void SCR_UpdateScreen( void ) {
-	static int	recursive;
+/*
+==================
+SCR_FollowWindowSize
 
+The window has a new size (WIN_ResizePending: dragged, maximised, restored): from this frame on the renderer draws at
+it, the menus and the console are laid out for its shape, without a vid_restart. (The cgame reads the size at every
+frame.)
+==================
+*/
+static void SCR_FollowWindowSize( void ) {
+	int width, height;
+
+	if ( !cls.rendererStarted || !re.WindowResized || !WIN_ResizePending( &width, &height ) ) {
+		return;
+	}
+	if ( width == cls.glconfig.vidWidth && height == cls.glconfig.vidHeight ) {
+		return;
+	}
+	re.WindowResized( width, height, &cls.glconfig );
+	g_console_field_width = cls.glconfig.vidWidth / SMALLCHAR_WIDTH - 2;
+	if ( cls.uiStarted ) {
+		UI_WindowResized();
+	}
+}
+
+static int	recursive;	// (SCR_UpdateScreen is drawing)
+
+/*
+==================
+SCR_RedrawResized
+
+The window's size changed (WIN_SetResizeRedraw): drawn at once, as the game is. While the window's edges are dragged,
+Windows runs no frame until the mouse button is let go, and the picture would stay as it was meanwhile. Only in the
+menus, the game or a cinematic, between frames (not while a level loads).
+==================
+*/
+static void SCR_RedrawResized( void ) {
+	if ( recursive || !scr_initialized || !cls.rendererStarted || !cls.uiStarted ) {
+		return;
+	}
+	if ( cls.state != CA_DISCONNECTED && cls.state != CA_ACTIVE && cls.state != CA_CINEMATIC ) {
+		return;
+	}
+	SCR_UpdateScreen();
+}
+
+void SCR_UpdateScreen( void ) {
 	if ( !scr_initialized ) {
 		return;				// not initialized yet
 	}
 
 	// load the ref / ui / cgame if needed
 	CL_StartHunkUsers();
+
+	if ( !recursive ) {
+		SCR_FollowWindowSize();
+	}
 
 	if ( ++recursive > 2 ) {
 		Com_Error( ERR_FATAL, "SCR_UpdateScreen: recursively called" );

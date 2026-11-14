@@ -32,5 +32,6 @@ void UI_SetActiveMenu( const char* menuname,const char *menuID );
 void UI_UpdateConnectionMessageString( char *string );
 qboolean UI_ConsoleCommand( void ) ;
 qboolean _UI_IsFullscreen( void );
+void UI_WindowResized( void );	// the screen has a new size: the menus are laid out for it
 
 #endif //__CLIENTUI_H__

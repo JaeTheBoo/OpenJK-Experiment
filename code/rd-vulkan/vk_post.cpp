@@ -1583,6 +1583,19 @@ void R_Post_Init( void )
 	}
 }
 
+// the depth of the render target on its own (the sampled view of a depth and stencil image has to name one aspect)
+static void MakeDepthView( void )
+{
+	VkImageViewCreateInfo viewInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+	viewInfo.image = vk.depthImage;
+	viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	viewInfo.format = vk.depthFormat;
+	viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+	viewInfo.subresourceRange.levelCount = 1;
+	viewInfo.subresourceRange.layerCount = 1;
+	VK_CheckResult( vkCreateImageView( vk.device, &viewInfo, NULL, &post.depthView ), "vkCreateImageView" );
+}
+
 void VK_InitPost( void )
 {
 	memset( &post, 0, sizeof( post ) );
@@ -1633,18 +1646,19 @@ void VK_InitPost( void )
 		VK_CheckResult( vkCreateDescriptorPool( vk.device, &poolInfo, NULL, &post.pools[i] ), "vkCreateDescriptorPool" );
 	}
 
-	// the depth of the view on its own (the sampled view of a depth and stencil image has to name one aspect)
-	VkImageViewCreateInfo viewInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-	viewInfo.image = vk.depthImage;
-	viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	viewInfo.format = vk.depthFormat;
-	viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-	viewInfo.subresourceRange.levelCount = 1;
-	viewInfo.subresourceRange.layerCount = 1;
-	VK_CheckResult( vkCreateImageView( vk.device, &viewInfo, NULL, &post.depthView ), "vkCreateImageView" );
+	MakeDepthView();
 
 	post.ready = true;
 	post.smaaOk = true;
+}
+
+void VK_PostTargetChanged( void )
+{
+	if ( post.ready )
+	{
+		vkDestroyImageView( vk.device, post.depthView, NULL );	// (the device is idle: VK_Resize)
+		MakeDepthView();
+	}
 }
 
 void VK_BeginFramePost( void )

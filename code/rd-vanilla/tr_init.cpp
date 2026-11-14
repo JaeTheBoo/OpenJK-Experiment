@@ -762,6 +762,7 @@ static qboolean InitOpenGL( void )
 #else
 		windowDesc_t windowDesc = { GRAPHICS_API_OPENGL };
 #endif
+		windowDesc.resizable = qtrue;	// (RE_WindowResized)
 		memset(&glConfig, 0, sizeof(glConfig));
 
 		window = ri.WIN_Init(&windowDesc, &glConfig);
@@ -1983,6 +1984,33 @@ void RE_Shutdown( qboolean destroyWindow, qboolean restarting ) {
 
 /*
 =============
+RE_WindowResized
+
+The window has a new size (its edges were dragged, it was maximised or restored): what is drawn follows it from the
+next frame on. The Vulkan renderer draws into a picture of its own, made again at the new size (VK_Resize); OpenGL's is
+the window's, of its images only the dynamic glow's are the size of the screen. The post processing's images follow
+the size of the view by themselves, and the 2D drawing the shape of the screen (R_Get2DVirtualWidth).
+=============
+*/
+static void RE_WindowResized( int width, int height, glconfig_t *config )
+{
+	if ( width > 0 && height > 0 && ( width != glConfig.vidWidth || height != glConfig.vidHeight ) && glConfig.vidWidth )
+	{
+		R_IssuePendingRenderCommands();
+		ri.Printf( PRINT_DEVELOPER, "Window resized: %d x %d\n", width, height );
+		glConfig.vidWidth = width;
+		glConfig.vidHeight = height;
+#ifdef RD_VULKAN
+		VK_Resize( width, height );
+#else
+		R_CreateGlowImages();
+#endif
+	}
+	*config = glConfig;
+}
+
+/*
+=============
 RE_EndRegistration
 
 Touch all images to make sure they are resident
@@ -2132,6 +2160,7 @@ extern "C" Q_EXPORT refexport_t* QDECL GetRefAPI ( int apiVersion, refimport_t *
 	REX(Shutdown);
 
 	REX(BeginRegistration);
+	REX(WindowResized);
 	REX(RegisterModel);
 	REX(RegisterSkin);
 	REX(GetAnimationCFG);

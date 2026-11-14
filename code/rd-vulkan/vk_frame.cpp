@@ -157,7 +157,9 @@ void VK_EnsureFrame( void )
 		frame->fenceSubmitted = false;
 	}
 
-	for ( ;; )
+	// (none while the window is minimised: the frame is drawn all the same, VK_PresentFrame does not show it)
+	vk.imageAcquired = false;
+	while ( !vk.surfaceHidden )
 	{
 		const VkResult result = vkAcquireNextImageKHR( vk.device, vk.swapchain, UINT64_MAX, frame->imageAvailable, VK_NULL_HANDLE, &vk.imageIndex );
 		if ( result == VK_ERROR_OUT_OF_DATE_KHR )
@@ -169,6 +171,7 @@ void VK_EnsureFrame( void )
 		{
 			VK_CheckResult( result, "vkAcquireNextImageKHR" );
 		}
+		vk.imageAcquired = true;
 		break;
 	}
 
@@ -178,7 +181,7 @@ void VK_EnsureFrame( void )
 	VK_ProcessDeferredDeletes();
 	VK_BeginFrameDraw();
 	VK_BeginFramePost();
-	vk.waitedForImage = false;
+	vk.waitedForImage = !vk.imageAcquired;	// (no image: nothing to wait for)
 	VK_BeginCommandBuffer();
 	// The pass that clears is begun by the first draw (VK_EnsureRenderPass), not here: the ray tracing structure of a
 	// view is built outside a pass first (VK_RT_BeginView), and a pass begun here would have been ended at once,
@@ -308,6 +311,25 @@ void VK_PresentFrame( window_t *window )
 	VK_FlaresCopy();
 
 	vkFrame_t *frame = &vk.frames[vk.frameIndex];
+
+	// the window is minimised (VK_EnsureFrame got no image): the frame's work is sent, nothing is shown
+	if ( !vk.imageAcquired )
+	{
+		VK_CheckResult( vkEndCommandBuffer( vk.cmd ), "vkEndCommandBuffer" );
+		VkSubmitInfo submit = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
+		submit.commandBufferCount = 1;
+		submit.pCommandBuffers = &vk.cmd;
+		VK_CheckResult( vkResetFences( vk.device, 1, &frame->fence ), "vkResetFences" );
+		VK_CheckResult( vkQueueSubmit( vk.queue, 1, &submit, frame->fence ), "vkQueueSubmit" );
+		frame->fenceSubmitted = true;
+		vk.submitSerial++;
+		vk.frameCounter++;
+		vk.frameStarted = false;
+		vk.inRenderPass = false;
+		vk.frameIndex = ( vk.frameIndex + 1 ) % VK_FRAMES_IN_FLIGHT;
+		return;
+	}
+
 	VkImage target = vk.swapchainImages[vk.imageIndex];
 
 	VK_ImageBarrier( vk.cmd, vk.colorImage, VK_IMAGE_ASPECT_COLOR_BIT,

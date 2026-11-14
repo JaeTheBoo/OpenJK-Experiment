@@ -28,6 +28,9 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 bool VK_Init( glconfig_t *glConfig );
 void VK_Shutdown( void );
 
+// The window has a new size (RE_WindowResized): the render target is made again at it, the swapchain follows.
+void VK_Resize( int width, int height );
+
 // A level was loaded: the ray tracing structures of the last one go (vk_rt.cpp).
 void VK_RT_NewLevel( void );
 

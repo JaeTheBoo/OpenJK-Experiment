@@ -41,12 +41,30 @@ static SDL_Window *screen = NULL;
 static SDL_GLContext opengl_context;
 static float displayAspect;
 
+// r_fullscreen: what the window is
+enum
+{
+	WINDOW_WINDOWED,	// 0: a window (with r_noborder 1 one without a frame), its edges can be dragged to resize it
+	WINDOW_FULLSCREEN,	// 1: the display is switched to the resolution, the game has it to itself
+	WINDOW_BORDERLESS	// 2: a window without a frame over the whole display, at the desktop's resolution
+};
+
+// The window's size as last seen (WIN_WindowResized), and a new size of the picture the client has not taken yet
+// (WIN_ResizePending)
+static int windowWidth, windowHeight;
+static bool windowMaximized;
+static int resizeWidth, resizeHeight;
+static bool resizePending;
+static void (*resizeRedraw)( void );	// WIN_SetResizeRedraw
+static int SDLCALL WIN_EventWatch( void *userdata, SDL_Event *event );
+
 cvar_t *r_sdlDriver;
 cvar_t *r_allowSoftwareGL;
 
 // Window cvars
 cvar_t	*r_fullscreen = 0;
 cvar_t	*r_noborder;
+cvar_t	*r_windowMaximized;
 cvar_t	*r_centerWindow;
 cvar_t	*r_customwidth;
 cvar_t	*r_customheight;
@@ -161,26 +179,25 @@ void WIN_Present( window_t *window )
 
 	if ( r_fullscreen->modified )
 	{
-		bool	fullscreen;
 		bool	needToToggle;
 		bool	sdlToggled = qfalse;
 
-		// Find out the current state
-		fullscreen = (SDL_GetWindowFlags( screen ) & SDL_WINDOW_FULLSCREEN) != 0;
-
-		if ( r_fullscreen->integer && Cvar_VariableIntegerValue( "in_nograb" ) )
+		if ( r_fullscreen->integer == WINDOW_FULLSCREEN && Cvar_VariableIntegerValue( "in_nograb" ) )
 		{
 			Com_Printf( "Fullscreen not allowed with in_nograb 1\n" );
 			Cvar_Set( "r_fullscreen", "0" );
 			r_fullscreen->modified = qfalse;
 		}
 
-		// Is the state we want different from the current state?
-		needToToggle = !!r_fullscreen->integer != fullscreen;
+		// Is the state we want (0, SDL_WINDOW_FULLSCREEN or SDL_WINDOW_FULLSCREEN_DESKTOP) different from the current state?
+		const Uint32 current = SDL_GetWindowFlags( screen ) & SDL_WINDOW_FULLSCREEN_DESKTOP;
+		const Uint32 wanted = r_fullscreen->integer == WINDOW_BORDERLESS ? SDL_WINDOW_FULLSCREEN_DESKTOP
+			: ( r_fullscreen->integer ? SDL_WINDOW_FULLSCREEN : 0 );
+		needToToggle = wanted != current;
 
 		if ( needToToggle )
 		{
-			sdlToggled = SDL_SetWindowFullscreen( screen, r_fullscreen->integer ) >= 0;
+			sdlToggled = SDL_SetWindowFullscreen( screen, wanted ) >= 0;
 
 			// SDL_WM_ToggleFullScreen didn't work, so do it the slow way
 			if ( !sdlToggled )
@@ -311,12 +328,37 @@ static bool GLimp_DetectAvailableModes(void)
 	return true;
 }
 
+// the size of the picture in the window, in pixels
+static void WIN_DrawableSize( int *width, int *height )
+{
+	*width = *height = 0;
+	if ( !screen )
+	{
+		return;
+	}
+	const Uint32 flags = SDL_GetWindowFlags( screen );
+	if ( flags & SDL_WINDOW_VULKAN )
+	{
+		SDL_Vulkan_GetDrawableSize( screen, width, height );
+	}
+	else if ( flags & SDL_WINDOW_OPENGL )
+	{
+		SDL_GL_GetDrawableSize( screen, width, height );
+	}
+	else
+	{
+		SDL_GetWindowSize( screen, width, height );
+	}
+}
+
 /*
 ===============
 GLimp_SetMode
+
+fullscreen is r_fullscreen's WINDOW_*.
 ===============
 */
-static rserr_t GLimp_SetMode(glconfig_t *glConfig, const windowDesc_t *windowDesc, const char *windowTitle, int mode, qboolean fullscreen, qboolean noborder)
+static rserr_t GLimp_SetMode(glconfig_t *glConfig, const windowDesc_t *windowDesc, const char *windowTitle, int mode, int fullscreen, qboolean noborder)
 {
 	int perChannelColorBits;
 	int colorBits, depthBits, stencilBits;
@@ -376,7 +418,16 @@ static rserr_t GLimp_SetMode(glconfig_t *glConfig, const windowDesc_t *windowDes
 		Com_Printf( "Cannot determine display aspect, assuming 1.333\n" );
 	}
 
-	Com_Printf( "...setting mode %d:", mode );
+	if ( fullscreen == WINDOW_BORDERLESS )
+	{
+		// (over the whole display: r_mode is only for a window and fullscreen)
+		Com_Printf( "...borderless, at the desktop resolution:" );
+		mode = -2;
+	}
+	else
+	{
+		Com_Printf( "...setting mode %d:", mode );
+	}
 
 	if (mode == -2)
 	{
@@ -425,7 +476,13 @@ static rserr_t GLimp_SetMode(glconfig_t *glConfig, const windowDesc_t *windowDes
 		screen = NULL;
 	}
 
-	if( fullscreen )
+	if ( fullscreen == WINDOW_BORDERLESS )
+	{
+		// SDL makes it a window without a frame over the display, the display's resolution unchanged
+		flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+		glConfig->isFullscreen = qtrue;
+	}
+	else if( fullscreen )
 	{
 #ifdef MACOS_X
         flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
@@ -438,9 +495,21 @@ static rserr_t GLimp_SetMode(glconfig_t *glConfig, const windowDesc_t *windowDes
 	{
 		if( noborder )
 			flags |= SDL_WINDOW_BORDERLESS;
+		else if ( windowDesc->resizable )
+		{
+			// its edges can be dragged and it can be maximised: the picture follows (WIN_WindowResized)
+			flags |= SDL_WINDOW_RESIZABLE;
+			if ( r_windowMaximized->integer )
+				flags |= SDL_WINDOW_MAXIMIZED;
+		}
 
 		glConfig->isFullscreen = qfalse;
 	}
+
+	// Fullscreen gives the display back when another program is chosen (it is minimised); borderless stays as it is,
+	// the other program comes in front of it. (SDL 2.0.12 minimises both unless told.)
+	SDL_SetHint( SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, fullscreen == WINDOW_BORDERLESS ? "0" : "1" );
+	resizePending = false;	// (of a window that is no more)
 
 	colorBits = r_colorbits->integer;
 	if ((!colorBits) || (colorBits >= 32))
@@ -588,7 +657,7 @@ static rserr_t GLimp_SetMode(glconfig_t *glConfig, const windowDesc_t *windowDes
 			SDL_SetWindowIcon( screen, icon );
 #endif
 
-			if( fullscreen )
+			if( fullscreen == WINDOW_FULLSCREEN )
 			{
 				SDL_DisplayMode mode;
 
@@ -649,7 +718,7 @@ static rserr_t GLimp_SetMode(glconfig_t *glConfig, const windowDesc_t *windowDes
 #ifndef MACOS_X
 			SDL_SetWindowIcon( screen, icon );
 #endif
-			if( fullscreen )
+			if( fullscreen == WINDOW_FULLSCREEN )
 			{
 				if( SDL_SetWindowDisplayMode( screen, NULL ) < 0 )
 				{
@@ -666,6 +735,26 @@ static rserr_t GLimp_SetMode(glconfig_t *glConfig, const windowDesc_t *windowDes
 		return RSERR_UNKNOWN;
 	}
 
+	if ( screen )
+	{
+		// A window may not be the size asked for (maximised: r_windowMaximized; or bigger than the display allows):
+		// the picture is the size it has
+		if ( fullscreen != WINDOW_FULLSCREEN )
+		{
+			int drawableWidth, drawableHeight;
+			WIN_DrawableSize( &drawableWidth, &drawableHeight );
+			if ( drawableWidth > 0 && drawableHeight > 0 &&
+				( drawableWidth != glConfig->vidWidth || drawableHeight != glConfig->vidHeight ) )
+			{
+				Com_Printf( "...the window is %d %d\n", drawableWidth, drawableHeight );
+				glConfig->vidWidth = drawableWidth;
+				glConfig->vidHeight = drawableHeight;
+			}
+		}
+		SDL_GetWindowSize( screen, &windowWidth, &windowHeight );
+		windowMaximized = ( SDL_GetWindowFlags( screen ) & SDL_WINDOW_MAXIMIZED ) != 0;
+	}
+
 	if (!GLimp_DetectAvailableModes())
 	{
 		return RSERR_UNKNOWN;
@@ -679,7 +768,7 @@ static rserr_t GLimp_SetMode(glconfig_t *glConfig, const windowDesc_t *windowDes
 GLimp_StartDriverAndSetMode
 ===============
 */
-static qboolean GLimp_StartDriverAndSetMode(glconfig_t *glConfig, const windowDesc_t *windowDesc, int mode, qboolean fullscreen, qboolean noborder)
+static qboolean GLimp_StartDriverAndSetMode(glconfig_t *glConfig, const windowDesc_t *windowDesc, int mode, int fullscreen, qboolean noborder)
 {
 	rserr_t err;
 
@@ -710,12 +799,12 @@ static qboolean GLimp_StartDriverAndSetMode(glconfig_t *glConfig, const windowDe
 		Com_Error( ERR_FATAL, "SDL_GetNumVideoDisplays() FAILED (%s)", SDL_GetError() );
 	}
 
-	if (fullscreen && Cvar_VariableIntegerValue( "in_nograb" ) )
+	if (fullscreen == WINDOW_FULLSCREEN && Cvar_VariableIntegerValue( "in_nograb" ) )
 	{
 		Com_Printf( "Fullscreen not allowed with in_nograb 1\n");
 		Cvar_Set( "r_fullscreen", "0" );
 		r_fullscreen->modified = qfalse;
-		fullscreen = qfalse;
+		fullscreen = WINDOW_WINDOWED;
 	}
 
 	err = GLimp_SetMode(glConfig, windowDesc, CLIENT_WINDOW_TITLE, mode, fullscreen, noborder);
@@ -747,8 +836,11 @@ window_t WIN_Init( const windowDesc_t *windowDesc, glconfig_t *glConfig )
 	r_allowSoftwareGL	= Cvar_Get( "r_allowSoftwareGL",	"0",		CVAR_ARCHIVE_ND|CVAR_LATCH );
 
 	// Window cvars
-	r_fullscreen		= Cvar_Get( "r_fullscreen",			"0",		CVAR_ARCHIVE|CVAR_LATCH );
+	r_fullscreen		= Cvar_Get( "r_fullscreen",			"0",		CVAR_ARCHIVE|CVAR_LATCH );	// WINDOW_*
+	Cvar_CheckRange( r_fullscreen, WINDOW_WINDOWED, WINDOW_BORDERLESS, qtrue );
 	r_noborder			= Cvar_Get( "r_noborder",			"0",		CVAR_ARCHIVE|CVAR_LATCH );
+	// set by the game: the window was maximised (with r_customwidth x r_customheight its size when it is not)
+	r_windowMaximized	= Cvar_Get( "r_windowMaximized",	"0",		CVAR_ARCHIVE_ND );
 	r_centerWindow		= Cvar_Get( "r_centerWindow",		"0",		CVAR_ARCHIVE|CVAR_LATCH );
 	r_customwidth		= Cvar_Get( "r_customwidth",		"1600",		CVAR_ARCHIVE|CVAR_LATCH );
 	r_customheight		= Cvar_Get( "r_customheight",		"1024",		CVAR_ARCHIVE|CVAR_LATCH );
@@ -768,13 +860,13 @@ window_t WIN_Init( const windowDesc_t *windowDesc, glconfig_t *glConfig )
 
 	// Create the window and set up the context
 	if(!GLimp_StartDriverAndSetMode( glConfig, windowDesc, r_mode->integer,
-										(qboolean)r_fullscreen->integer, (qboolean)r_noborder->integer ))
+										r_fullscreen->integer, (qboolean)r_noborder->integer ))
 	{
 		if( r_mode->integer != R_MODE_FALLBACK )
 		{
 			Com_Printf( "Setting r_mode %d failed, falling back on r_mode %d\n", r_mode->integer, R_MODE_FALLBACK );
 
-			if (!GLimp_StartDriverAndSetMode( glConfig, windowDesc, R_MODE_FALLBACK, qfalse, qfalse ))
+			if (!GLimp_StartDriverAndSetMode( glConfig, windowDesc, R_MODE_FALLBACK, WINDOW_WINDOWED, qfalse ))
 			{
 				// Nothing worked, give up
 				Com_Error( ERR_FATAL, "GLimp_Init() - could not load OpenGL subsystem" );
@@ -787,6 +879,7 @@ window_t WIN_Init( const windowDesc_t *windowDesc, glconfig_t *glConfig )
 
 	// This depends on SDL_INIT_VIDEO, hence having it here
 	IN_Init( screen );
+	SDL_AddEventWatch( WIN_EventWatch, NULL );
 
 	// window_t is only really useful for Windows if the renderer wants to create a D3D context.
 	window_t window = {};
@@ -823,6 +916,7 @@ void WIN_Shutdown( void )
 	Cmd_RemoveCommand("modelist");
 	Cmd_RemoveCommand("minimize");
 
+	SDL_DelEventWatch( WIN_EventWatch, NULL );
 	IN_Shutdown();
 
 	if ( opengl_context ) {
@@ -942,4 +1036,95 @@ void WIN_Vulkan_GetDrawableSize( int *width, int *height )
 	{
 		SDL_Vulkan_GetDrawableSize( screen, width, height );
 	}
+}
+
+/*
+===============
+WIN_WindowResized
+
+From the window's events (WIN_EventWatch): its size changed (its edges dragged, maximised or restored, the display
+changed). The picture follows at the client's next frame (WIN_ResizePending). A window that can be resized keeps its
+new size for the next start: r_mode -1 with r_customwidth x r_customheight, or r_windowMaximized.
+===============
+*/
+static void WIN_WindowResized( void )
+{
+	if ( !screen )
+	{
+		return;
+	}
+	const Uint32 flags = SDL_GetWindowFlags( screen );
+	if ( flags & SDL_WINDOW_MINIMIZED )
+	{
+		return;	// (no picture to draw; it comes back with the size it had)
+	}
+
+	if ( !( flags & SDL_WINDOW_FULLSCREEN ) && ( flags & SDL_WINDOW_RESIZABLE ) )
+	{
+		int width, height;
+		const bool maximized = ( flags & SDL_WINDOW_MAXIMIZED ) != 0;
+		SDL_GetWindowSize( screen, &width, &height );
+		if ( maximized != windowMaximized )
+		{
+			Cvar_Set( "r_windowMaximized", maximized ? "1" : "0" );
+		}
+		// (the size of a maximised window is the display's: the one it gets back when it is restored is kept)
+		if ( !maximized && width > 0 && height > 0 && ( width != windowWidth || height != windowHeight ) )
+		{
+			Cvar_Set( "r_mode", "-1" );
+			Cvar_Set( "r_customwidth", va( "%d", width ) );
+			Cvar_Set( "r_customheight", va( "%d", height ) );
+		}
+		windowWidth = width;
+		windowHeight = height;
+		windowMaximized = maximized;
+	}
+
+	int drawableWidth, drawableHeight;
+	WIN_DrawableSize( &drawableWidth, &drawableHeight );
+	if ( drawableWidth > 0 && drawableHeight > 0 )
+	{
+		resizeWidth = drawableWidth;
+		resizeHeight = drawableHeight;
+		resizePending = true;
+	}
+}
+
+qboolean WIN_ResizePending( int *width, int *height )
+{
+	if ( !resizePending )
+	{
+		return qfalse;
+	}
+	resizePending = false;
+	*width = resizeWidth;
+	*height = resizeHeight;
+	return qtrue;
+}
+
+void WIN_SetResizeRedraw( void (*redraw)( void ) )
+{
+	resizeRedraw = redraw;
+}
+
+/*
+===============
+WIN_EventWatch
+
+SDL calls it as soon as an event is sent, before the event waits in the queue for IN_ProcessEvents. While the window's
+edges are dragged that is the only way in: Windows keeps the program in its own loop until the mouse button is let
+go. The picture is drawn again at each new size then (WIN_SetResizeRedraw).
+===============
+*/
+static int SDLCALL WIN_EventWatch( void *userdata, SDL_Event *event )
+{
+	if ( event->type == SDL_WINDOWEVENT && event->window.event == SDL_WINDOWEVENT_SIZE_CHANGED )
+	{
+		WIN_WindowResized();
+		if ( resizePending && resizeRedraw )
+		{
+			resizeRedraw();
+		}
+	}
+	return 0;
 }

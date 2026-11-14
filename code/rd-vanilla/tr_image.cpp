@@ -1452,49 +1452,7 @@ void R_CreateBuiltinImages( void ) {
 
 	tr.screenImage = R_CreateImage("*screen", (byte *)data, 8, 8, GL_RGBA, qfalse, qfalse, qfalse, GL_REPEAT );
 
-	R_DeleteGlowImages();
-
-	// Create the scene glow image. - AReis
-	tr.screenGlow = 1024 + giTextureBindNum++;
-	qglDisable( GL_TEXTURE_2D );
-	qglEnable( GL_TEXTURE_RECTANGLE_ARB );
-	qglBindTexture( GL_TEXTURE_RECTANGLE_ARB, tr.screenGlow );
-	qglTexImage2D( GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA16, glConfig.vidWidth, glConfig.vidHeight, 0, GL_RGB, GL_FLOAT, 0 );
-	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-
-	// Create the scene image. - AReis
-	tr.sceneImage = 1024 + giTextureBindNum++;
-	qglBindTexture( GL_TEXTURE_RECTANGLE_ARB, tr.sceneImage );
-	qglTexImage2D( GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA16, glConfig.vidWidth, glConfig.vidHeight, 0, GL_RGB, GL_FLOAT, 0 );
-	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-
-	// Create the minimized scene blur image.
-	if ( r_DynamicGlowWidth->integer > glConfig.vidWidth  )
-	{
-		r_DynamicGlowWidth->integer = glConfig.vidWidth;
-	}
-	if ( r_DynamicGlowHeight->integer > glConfig.vidHeight  )
-	{
-		r_DynamicGlowHeight->integer = glConfig.vidHeight;
-	}
-	tr.blurImage = 1024 + giTextureBindNum++;
-	qglBindTexture( GL_TEXTURE_RECTANGLE_ARB, tr.blurImage );
-	qglTexImage2D( GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA16, r_DynamicGlowWidth->integer, r_DynamicGlowHeight->integer, 0, GL_RGB, GL_FLOAT, 0 );
-	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-	qglDisable( GL_TEXTURE_RECTANGLE_ARB );
-	qglEnable( GL_TEXTURE_2D );
-	glowImages[0] = tr.screenGlow;
-	glowImages[1] = tr.sceneImage;
-	glowImages[2] = tr.blurImage;
+	R_CreateGlowImages();
 
 
 	// with overbright bits active, we need an image which is some fraction of full color,
@@ -1519,6 +1477,63 @@ void R_CreateBuiltinImages( void ) {
 
 	R_CreateDlightImage();
 	R_CreateFogImage();
+}
+
+/*
+==================
+R_CreateGlowImages
+
+The dynamic glow's images are the size of the screen: made with the others, and again when the window's size changes
+(RE_WindowResized).
+==================
+*/
+void R_CreateGlowImages( void ) {
+	R_DeleteGlowImages();
+
+	// Create the scene glow image. - AReis
+	tr.screenGlow = 1024 + giTextureBindNum++;
+	qglDisable( GL_TEXTURE_2D );
+	qglEnable( GL_TEXTURE_RECTANGLE_ARB );
+	qglBindTexture( GL_TEXTURE_RECTANGLE_ARB, tr.screenGlow );
+	qglTexImage2D( GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA16, glConfig.vidWidth, glConfig.vidHeight, 0, GL_RGB, GL_FLOAT, 0 );
+	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+
+	// Create the scene image. - AReis
+	tr.sceneImage = 1024 + giTextureBindNum++;
+	qglBindTexture( GL_TEXTURE_RECTANGLE_ARB, tr.sceneImage );
+	qglTexImage2D( GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA16, glConfig.vidWidth, glConfig.vidHeight, 0, GL_RGB, GL_FLOAT, 0 );
+	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+
+	// Create the minimized scene blur image.
+	// (no larger than the screen; from the settings again, a smaller window before may have lowered them)
+	r_DynamicGlowWidth->integer = atoi( r_DynamicGlowWidth->string );
+	r_DynamicGlowHeight->integer = atoi( r_DynamicGlowHeight->string );
+	if ( r_DynamicGlowWidth->integer > glConfig.vidWidth  )
+	{
+		r_DynamicGlowWidth->integer = glConfig.vidWidth;
+	}
+	if ( r_DynamicGlowHeight->integer > glConfig.vidHeight  )
+	{
+		r_DynamicGlowHeight->integer = glConfig.vidHeight;
+	}
+	tr.blurImage = 1024 + giTextureBindNum++;
+	qglBindTexture( GL_TEXTURE_RECTANGLE_ARB, tr.blurImage );
+	qglTexImage2D( GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA16, r_DynamicGlowWidth->integer, r_DynamicGlowHeight->integer, 0, GL_RGB, GL_FLOAT, 0 );
+	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+	qglTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+	qglDisable( GL_TEXTURE_RECTANGLE_ARB );
+	qglEnable( GL_TEXTURE_2D );
+	glowImages[0] = tr.screenGlow;
+	glowImages[1] = tr.sceneImage;
+	glowImages[2] = tr.blurImage;
 }
 
 

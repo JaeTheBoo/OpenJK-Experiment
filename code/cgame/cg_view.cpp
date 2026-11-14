@@ -1994,6 +1994,9 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView ) {
 
 	cg.time = serverTime;
 
+	// the window can be given another size while playing (its edges dragged): the view follows it
+	cgi_GetGlconfig( &cgs.glconfig );
+
 	// update cvars
 	CG_UpdateCvars();
 

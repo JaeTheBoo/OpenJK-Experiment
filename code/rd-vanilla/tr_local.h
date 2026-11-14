@@ -1435,6 +1435,7 @@ void	R_InitFogTable( void );
 float	R_FogFactor( float s, float t );
 void	R_InitImages( void );
 void	R_DeleteTextures( void );
+void	R_CreateGlowImages( void );	// the dynamic glow's images, of the screen's size (again when it changes)
 float	R_SumOfUsedImages( qboolean bUseFormat );
 void	R_InitSkins( void );
 skin_t	*R_GetSkinByHandle( qhandle_t hSkin );

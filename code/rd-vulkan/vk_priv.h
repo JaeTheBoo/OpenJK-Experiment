@@ -103,6 +103,8 @@ typedef struct vk_s {
 	int							clearStencil;
 
 	bool						swapchainDirty;		// recreate before the next frame (vsync mode changed, window resized)
+	bool						surfaceHidden;		// the window has no area (minimised): no swapchain can be made, frames are drawn but not shown
+	bool						imageAcquired;		// the frame has a swapchain image to be shown in (not while surfaceHidden)
 
 	// time, for knowing when the GPU is done with something
 	int							frameCounter;		// frames presented so far
@@ -294,6 +296,7 @@ void		VK_ResetGLState( void );
 
 // vk_post.cpp
 void		VK_InitPost( void );
+void		VK_PostTargetChanged( void );	// the render target was made again (VK_Resize): the post processing's view of its depth too
 void		VK_BeginFramePost( void );		// the frame slot is free again
 void		VK_ShutdownPost( void );
 

@@ -30,7 +30,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "../ghoul2/G2.h"
 #include "../ghoul2/ghoul2_gore.h"
 
-#define	REF_API_VERSION		21
+#define	REF_API_VERSION		22
 
 typedef struct {
 	void				(QDECL *Printf)						( int printLevel, const char *fmt, ...) __attribute__ ((format (printf, 2, 3)));
@@ -159,6 +159,9 @@ typedef struct {
 	// and height, which can be used by the client to intelligently
 	// size display elements
 	void	(*BeginRegistration)( glconfig_t *config );
+	// the window has a new size (WIN_ResizePending): what is drawn follows it from the next frame on, without a
+	// vid_restart; config gets the new vidWidth x vidHeight
+	void	(*WindowResized)( int width, int height, glconfig_t *config );
 	qhandle_t (*RegisterModel)( const char *name );
 	qhandle_t (*RegisterSkin)( const char *name );
 	int		  (*GetAnimationCFG)(const char *psCFGFilename, char *psDest, int iDestSize);

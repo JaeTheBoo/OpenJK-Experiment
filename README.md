@@ -85,6 +85,14 @@ Characters become physics ragdolls when they die. The muscle-driven behaviours a
 | `g_campaign` | `academy` | Which story is being played: `academy` or `outcast`. Set by New Game and kept in saved games. |
 | `ui_style` | `academy` | Whose menus and HUD to use: `academy` or `outcast` (needs Jedi Outcast's game data). Also in Setup → Options as "Interface". New Game and loading a saved game switch it to that story's own, and `--campaign=outcast-ja` starts with `outcast`. Choosing Jedi Academy's story at New Game in Jedi Outcast's menus switches at once, as its character is created in Jedi Academy's menus. |
 
+### Display
+
+| Setting | Default | What it does |
+| - | - | - |
+| `r_fullscreen` | `0` | Upstream's setting, with a third value. `1` = fullscreen: the display switches to the chosen resolution. `2` = borderless: a window without a frame over the whole display, always at the desktop's resolution; switching to other programs is quick and it stays where it is. `0` = a window. In Setup → Video as "Display Mode" (Fullscreen, Borderless, Windowed), applied with Apply Changes; the resolution row is greyed out in Borderless. Latched. |
+
+A window (`r_fullscreen 0`, without `r_noborder 1`) can be resized: drag its edges or maximise it, and the picture, the menus and the HUD follow at once, without a restart and without reloading anything. Effects (ambient occlusion, bloom, SMAA, eye adaptation, light shafts, soft shadows, ray tracing) follow too. The new size is kept for the next start (`r_mode -1` with `r_customwidth` x `r_customheight`), and so is a maximised window (`r_windowMaximized`, under Set by the game). In a window taller than 4:3 the menus and HUD are stretched upwards, as the original game does.
+
 ### Graphics
 
 Rows for most of these are in Setup → More Video, and appear only when your renderer can do the effect.
@@ -162,7 +170,8 @@ These report state and are not meant to be changed:
 - `cl_rendererFailure`: why the Vulkan renderer couldn't start, if it couldn't.
 - `com_configVersion`: how far an old config has been brought up to date.
 - `com_levelLoading`, `r_outcastAnimationsStart`, `ui_gameSettingEntry` (the number being typed on the Game Settings page): internal.
-- `ui_r_resolution`, `ui_r_ext_multisample`: the Video page's choices of resolution and anti-aliasing, applied with Apply.
+- `ui_r_resolution`, `ui_r_ext_multisample`: the Video page's choices of resolution and anti-aliasing, applied with Apply. `ui_r_resolutionKept`: the resolution chosen for the other display modes while Borderless is chosen.
+- `r_windowMaximized`: `1` when the window was maximised, so that the next start (and `vid_restart`) opens it maximised again. Saved.
 
 ### Changed defaults
 

@@ -111,6 +111,7 @@ void			_UI_DrawSides(float x, float y, float w, float h, float size);
 void			UI_CheckVid1Data(const char *menuTo,const char *warningMenuName);
 void			UI_GetVideoSetup ( void );
 void			UI_UpdateVideoSetup ( void );
+static void		UI_DisplayModeChanged( void );
 static void		UI_UpdateCharacterCvars ( void );
 static void		UI_GetCharacterCvars ( void );
 static void		UI_UpdateSaberCvars ( void );
@@ -1490,6 +1491,10 @@ static qboolean UI_RunMenuScript ( const char **args )
 		else if (Q_stricmp(name, "glCustom") == 0)
 		{
 			Cvar_Set("ui_r_glCustom", "4");
+		}
+		else if (Q_stricmp(name, "displayMode") == 0)
+		{//the Video page's display mode row changed (Item_ApplyHacks)
+			UI_DisplayModeChanged();
 		}
 		else if (Q_stricmp(name, "character") == 0)
 		{
@@ -2908,6 +2913,40 @@ void UI_Shutdown( void )
 
 /*
 =================
+UI_WindowResized
+
+The screen's size and the scale from the menus' 640x480 to it: at the start, and again when the window is given another
+size (SCR_FollowWindowSize, the menus are laid out for its shape at once).
+=================
+*/
+void UI_WindowResized( void )
+{
+	trap_GetGlconfig( &uiInfo.uiDC.glconfig );
+	uis.glconfig = uiInfo.uiDC.glconfig;
+	uis.scaley = uis.glconfig.vidHeight * (1.0/480.0);
+	uis.scalex = uis.glconfig.vidWidth * (1.0/640.0);
+
+	// for 640x480 virtualized screen
+	uiInfo.uiDC.yscale = uiInfo.uiDC.glconfig.vidHeight * (1.0/480.0);
+	uiInfo.uiDC.xscale = uiInfo.uiDC.glconfig.vidWidth * (1.0/640.0);
+	if ( uiInfo.uiDC.glconfig.vidWidth * 480 > uiInfo.uiDC.glconfig.vidHeight * 640 && Cvar_VariableIntegerValue( "r_wideUI" ) )
+	{
+		// wide screen: the renderer keeps the 640x480 area proportional and centred (see R_Get2DVirtualWidth),
+		// so pixel positions derived from it (e.g. 3D models) must use the same uniform scale and offset
+		uiInfo.uiDC.xscale = uiInfo.uiDC.yscale;
+		uiInfo.uiDC.bias = 0.5 * ( uiInfo.uiDC.glconfig.vidWidth - ( uiInfo.uiDC.glconfig.vidHeight * (640.0/480.0) ) );
+		uiInfo.uiDC.margin = uiInfo.uiDC.bias / uiInfo.uiDC.yscale;
+	}
+	else
+	{
+		// no wide screen
+		uiInfo.uiDC.bias = 0;
+		uiInfo.uiDC.margin = 0;
+	}
+}
+
+/*
+=================
 UI_Init
 =================
 */
@@ -2965,25 +3004,7 @@ void _UI_Init( qboolean inGameLoad )
 	UI_InitMemory();
 
 	// cache redundant calulations
-	trap_GetGlconfig( &uiInfo.uiDC.glconfig );
-
-	// for 640x480 virtualized screen
-	uiInfo.uiDC.yscale = uiInfo.uiDC.glconfig.vidHeight * (1.0/480.0);
-	uiInfo.uiDC.xscale = uiInfo.uiDC.glconfig.vidWidth * (1.0/640.0);
-	if ( uiInfo.uiDC.glconfig.vidWidth * 480 > uiInfo.uiDC.glconfig.vidHeight * 640 && Cvar_VariableIntegerValue( "r_wideUI" ) )
-	{
-		// wide screen: the renderer keeps the 640x480 area proportional and centred (see R_Get2DVirtualWidth),
-		// so pixel positions derived from it (e.g. 3D models) must use the same uniform scale and offset
-		uiInfo.uiDC.xscale = uiInfo.uiDC.yscale;
-		uiInfo.uiDC.bias = 0.5 * ( uiInfo.uiDC.glconfig.vidWidth - ( uiInfo.uiDC.glconfig.vidHeight * (640.0/480.0) ) );
-		uiInfo.uiDC.margin = uiInfo.uiDC.bias / uiInfo.uiDC.yscale;
-	}
-	else
-	{
-		// no wide screen
-		uiInfo.uiDC.bias = 0;
-		uiInfo.uiDC.margin = 0;
-	}
+	UI_WindowResized();
 
 	Init_Display(&uiInfo.uiDC);
 
@@ -4535,6 +4556,32 @@ void Menu_Cache( void )
 
 /*
 =================
+UI_DisplayModeChanged
+
+The Video page's display mode row (ui_r_fullscreen: 1 fullscreen, 2 borderless, 0 windowed, Item_ApplyHacks) was
+changed, or the page was opened. Borderless always has the desktop's resolution: the resolution row shows that, greyed
+out, and the resolution it had is kept for the other modes (ui_r_resolutionKept, applied with them all the same).
+=================
+*/
+static void UI_DisplayModeChanged( void )
+{
+	const bool borderless = Cvar_VariableIntegerValue( "ui_r_fullscreen" ) == 2;
+	const bool kept = Cvar_VariableString( "ui_r_resolutionKept" )[0] != '\0';
+
+	if ( borderless && !kept )
+	{
+		Cvar_Set( "ui_r_resolutionKept", Cvar_VariableString( "ui_r_resolution" ) );
+		Cvar_Set( "ui_r_resolution", "desktop" );
+	}
+	else if ( !borderless && kept )
+	{
+		Cvar_Set( "ui_r_resolution", Cvar_VariableString( "ui_r_resolutionKept" ) );
+		Cvar_Set( "ui_r_resolutionKept", "" );
+	}
+}
+
+/*
+=================
 UI_UpdateVideoSetup
 
 Copies the temporary user interface version of the video cvars into
@@ -4544,8 +4591,13 @@ you to discard your changes if you did something you didnt want
 */
 void UI_UpdateVideoSetup ( void )
 {
-	// the resolution is selected through ui_r_resolution: "desktop" or "WIDTHxHEIGHT"
+	// the resolution is selected through ui_r_resolution: "desktop" or "WIDTHxHEIGHT". (Borderless shows the desktop's,
+	// which it always has: the one for the other modes is kept, UI_DisplayModeChanged.)
 	const char *resolution = Cvar_VariableString ( "ui_r_resolution" );
+	if ( Cvar_VariableIntegerValue ( "ui_r_fullscreen" ) == 2 && Cvar_VariableString ( "ui_r_resolutionKept" )[0] )
+	{
+		resolution = Cvar_VariableString ( "ui_r_resolutionKept" );
+	}
 	int width, height;
 	if ( sscanf ( resolution, "%dx%d", &width, &height ) == 2 && width > 0 && height > 0 )
 	{
@@ -4592,6 +4644,7 @@ void UI_GetVideoSetup ( void )
 	// Make sure the cvars are registered as read only.
 	Cvar_Register ( NULL, "ui_r_mode",					"0", CVAR_ROM );
 	Cvar_Register ( NULL, "ui_r_resolution",			"desktop", CVAR_ROM );
+	Cvar_Register ( NULL, "ui_r_resolutionKept",		"", CVAR_ROM );
 	Cvar_Register ( NULL, "ui_r_fullscreen",			"0", CVAR_ROM );
 	Cvar_Register ( NULL, "ui_r_colorbits",				"0", CVAR_ROM );
 	Cvar_Register ( NULL, "ui_r_lodbias",				"0", CVAR_ROM );
@@ -4611,17 +4664,27 @@ void UI_GetVideoSetup ( void )
 
 	// Copy over the real video cvars into their temporary counterparts
 	Cvar_Set ( "ui_r_mode", Cvar_VariableString ( "r_mode" ) );
-	if ( Cvar_VariableIntegerValue ( "r_mode" ) == -2 )
+	const int mode = Cvar_VariableIntegerValue ( "r_mode" );
+	const bool borderless = Cvar_VariableIntegerValue ( "r_fullscreen" ) == 2;
+	int width, height;
+	if ( mode == -2 )
 	{
 		Cvar_Set ( "ui_r_resolution", "desktop" );
+	}
+	else if ( ( mode == -1 || borderless ) && R_GetModeInfo ( &width, &height, mode ) )
+	{
+		// a custom size (a window's: the one it has when it is not maximised), or the mode borderless does not use
+		Cvar_Set ( "ui_r_resolution", va ( "%dx%d", width, height ) );
 	}
 	else
 	{
 		// r_mode may be a fixed mode or a custom size, either way the real size is what the renderer is using
 		Cvar_Set ( "ui_r_resolution", va ( "%dx%d", uiInfo.uiDC.glconfig.vidWidth, uiInfo.uiDC.glconfig.vidHeight ) );
 	}
+	Cvar_Set ( "ui_r_resolutionKept", "" );
 	Cvar_Set ( "ui_r_colorbits", Cvar_VariableString ( "r_colorbits" ) );
 	Cvar_Set ( "ui_r_fullscreen", Cvar_VariableString ( "r_fullscreen" ) );
+	UI_DisplayModeChanged ();
 	Cvar_Set ( "ui_r_lodbias", Cvar_VariableString ( "r_lodbias" ) );
 	Cvar_Set ( "ui_r_picmip", Cvar_VariableString ( "r_picmip" ) );
 	Cvar_Set ( "ui_r_texturebits", Cvar_VariableString ( "r_texturebits" ) );

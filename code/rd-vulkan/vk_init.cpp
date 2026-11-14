@@ -648,6 +648,8 @@ static VkSampleCountFlagBits VK_ChooseSamples( int wanted )
 	return VK_SAMPLE_COUNT_1_BIT;
 }
 
+// the render target's images and framebuffer, of vk.width x vk.height (again when the window's size changes:
+// VK_Resize); the render passes are made the first time
 static void VK_CreateRenderTarget( void )
 {
 	vk.colorFormat = VK_FORMAT_R8G8B8A8_UNORM;
@@ -668,8 +670,11 @@ static void VK_CreateRenderTarget( void )
 	}
 
 	const bool multisampled = vk.samples != VK_SAMPLE_COUNT_1_BIT;
-	vk.renderPassClear = multisampled ? VK_CreateRenderPassMultisampled( true ) : VK_CreateRenderPass( true );
-	vk.renderPassLoad = multisampled ? VK_CreateRenderPassMultisampled( false ) : VK_CreateRenderPass( false );
+	if ( !vk.renderPassClear )
+	{
+		vk.renderPassClear = multisampled ? VK_CreateRenderPassMultisampled( true ) : VK_CreateRenderPass( true );
+		vk.renderPassLoad = multisampled ? VK_CreateRenderPassMultisampled( false ) : VK_CreateRenderPass( false );
+	}
 
 	// (multisampled: the multisampled images first, the single sample ones they are resolved into after)
 	const VkImageView views[4] = { multisampled ? vk.msaaColorView : vk.colorView, multisampled ? vk.msaaDepthView : vk.depthView,
@@ -729,11 +734,17 @@ static void VK_CreateRenderTarget( void )
 	vkDestroyCommandPool( vk.device, pool, NULL );
 }
 
-static void VK_DestroyRenderTarget( void )
+// (with passes the render passes as well: at shutdown)
+static void VK_DestroyRenderTarget( bool passes )
 {
 	vkDestroyFramebuffer( vk.device, vk.framebuffer, NULL );
-	vkDestroyRenderPass( vk.device, vk.renderPassClear, NULL );
-	vkDestroyRenderPass( vk.device, vk.renderPassLoad, NULL );
+	vk.framebuffer = VK_NULL_HANDLE;
+	if ( passes )
+	{
+		vkDestroyRenderPass( vk.device, vk.renderPassClear, NULL );
+		vkDestroyRenderPass( vk.device, vk.renderPassLoad, NULL );
+		vk.renderPassClear = vk.renderPassLoad = VK_NULL_HANDLE;
+	}
 	if ( vk.samples != VK_SAMPLE_COUNT_1_BIT )
 	{
 		vkDestroyImageView( vk.device, vk.msaaDepthView, NULL );
@@ -815,6 +826,15 @@ void VK_CreateSwapchain( void )
 	if ( extent.height < capabilities.minImageExtent.height ) extent.height = capabilities.minImageExtent.height;
 	if ( extent.width > capabilities.maxImageExtent.width ) extent.width = capabilities.maxImageExtent.width;
 	if ( extent.height > capabilities.maxImageExtent.height ) extent.height = capabilities.maxImageExtent.height;
+	if ( extent.width == 0 || extent.height == 0 )
+	{
+		// A minimised window has no area and no swapchain can be made for it: the frames are drawn but not shown
+		// (VK_EnsureFrame, VK_PresentFrame) until it comes back, asked again at every frame
+		vk.surfaceHidden = true;
+		vk.swapchainDirty = true;
+		return;
+	}
+	vk.surfaceHidden = false;
 
 	uint32_t imageCount = capabilities.minImageCount + 1;
 	if ( capabilities.maxImageCount && imageCount > capabilities.maxImageCount ) imageCount = capabilities.maxImageCount;
@@ -1027,6 +1047,36 @@ bool VK_Init( glconfig_t *glConfig )
 	return true;
 }
 
+/*
+=================
+VK_Resize
+
+The window has a new size (RE_WindowResized, between frames): the render target is made again at it, and the
+swapchain at the next frame. A frame begun already (an upload, a read back) is sent and waited for first: its commands
+use the old images; the rest of it starts with a clear. The post processing's images follow the size of the view by
+themselves (EnsureImages, EnsureSoftDepth, RB_GammaPass), its view of the depth is made again here.
+=================
+*/
+void VK_Resize( int width, int height )
+{
+	if ( !vk.device || width <= 0 || height <= 0 || ( width == vk.width && height == vk.height ) )
+	{
+		return;
+	}
+	if ( vk.frameStarted )
+	{
+		VK_SubmitFrame( true );
+		vk.clearPending = true;
+	}
+	vkDeviceWaitIdle( vk.device );
+	VK_DestroyRenderTarget( false );
+	vk.width = width;
+	vk.height = height;
+	VK_CreateRenderTarget();
+	VK_PostTargetChanged();
+	vk.swapchainDirty = true;
+}
+
 void VK_Shutdown( void )
 {
 	if ( !vk.device )
@@ -1049,7 +1099,7 @@ void VK_Shutdown( void )
 	}
 	VK_DestroySwapchain();
 	vkDestroySwapchainKHR( vk.device, vk.swapchain, NULL );
-	VK_DestroyRenderTarget();
+	VK_DestroyRenderTarget( true );
 	vkDestroyDevice( vk.device, NULL );
 	vkDestroySurfaceKHR( vk.instance, vk.surface, NULL );
 	if ( vk.messenger )

@@ -1030,29 +1030,49 @@ qboolean MenuParse_fadeCycle( itemDef_t *item)
 	return qtrue;
 }
 
-// "Desktop resolution" in the language of the game (the games' own strings have no such words; in Latin-1, as theirs)
-static const char *UI_DesktopResolutionLabel( void )
+// the language of the game, for the words the games' own strings have none of: 0 English, 1 French, 2 German,
+// 3 Italian, 4 Spanish
+static int UI_WordsLanguage( void )
 {
 #ifdef JK2_MODE
 	switch ( sp_language->integer )
 	{
-	case SP_LANGUAGE_FRENCH:	return "R\xe9solution du bureau";
-	case SP_LANGUAGE_GERMAN:	return "Desktop-Aufl\xf6sung";
-	case SP_LANGUAGE_ITALIAN:	return "Risoluzione del desktop";
-	case SP_LANGUAGE_SPANISH:	return "Resoluci\xf3n del escritorio";
-	default:					return "Desktop resolution";
+	case SP_LANGUAGE_FRENCH:	return 1;
+	case SP_LANGUAGE_GERMAN:	return 2;
+	case SP_LANGUAGE_ITALIAN:	return 3;
+	case SP_LANGUAGE_SPANISH:	return 4;
+	default:					return 0;
 	}
 #else
-	if ( !Q_stricmp( se_language->string, "french" ) )
-		return "R\xe9solution du bureau";
-	if ( !Q_stricmp( se_language->string, "german" ) )
-		return "Desktop-Aufl\xf6sung";
-	if ( !Q_stricmp( se_language->string, "italian" ) )
-		return "Risoluzione del desktop";
-	if ( !Q_stricmp( se_language->string, "spanish" ) )
-		return "Resoluci\xf3n del escritorio";
-	return "Desktop resolution";
+	static const char *const names[] = { "french", "german", "italian", "spanish" };
+	for ( int i = 0; i < (int)ARRAY_LEN( names ); i++ )
+	{
+		if ( !Q_stricmp( se_language->string, names[i] ) )
+			return i + 1;
+	}
+	return 0;
 #endif
+}
+
+// "Desktop resolution" in the language of the game (in Latin-1, as the games' strings)
+static const char *UI_DesktopResolutionLabel( void )
+{
+	static const char *const labels[] = { "Desktop resolution", "R\xe9solution du bureau", "Desktop-Aufl\xf6sung",
+		"Risoluzione del desktop", "Resoluci\xf3n del escritorio" };
+	return labels[UI_WordsLanguage()];
+}
+
+// The display mode row's name, then its fullscreen, borderless and windowed, in the language of the game
+static const char *const *UI_DisplayModeLabels( void )
+{
+	static const char *const labels[][4] = {
+		{ "Display Mode:", "Fullscreen", "Borderless", "Windowed" },
+		{ "Mode d'affichage:", "Plein \xe9" "cran", "Sans bordure", "Fen\xeatr\xe9" },
+		{ "Anzeigemodus:", "Vollbild", "Randlos", "Fenster" },
+		{ "Modalit\xe0 schermo:", "Schermo intero", "Senza bordi", "Finestra" },
+		{ "Modo de pantalla:", "Pantalla completa", "Sin bordes", "Ventana" },
+	};
+	return labels[UI_WordsLanguage()];
 }
 
 /*
@@ -1236,7 +1256,33 @@ static void Item_ApplyHacks( itemDef_t *item ) {
 			multiPtr->count++;
 		}
 		item->cvar = String_Alloc( "ui_r_resolution" );
+		// greyed out in borderless, which always has the desktop's resolution (UI_DisplayModeChanged)
+		item->cvarTest = String_Alloc( "ui_r_fullscreen" );
+		item->enableCvar = String_Alloc( "2" );
+		item->cvarFlags = CVAR_DISABLE;
 		Com_Printf( "Replaced video mode field with %d display resolutions.\n", multiPtr->count );
+	}
+
+	if ( item->type == ITEM_TYPE_MULTI && item->cvar && !Q_stricmp( item->cvar, "ui_r_fullscreen" ) && item->typeData ) {
+		// The stock row turns fullscreen on or off. Offer fullscreen, borderless (a window without a frame over the
+		// whole display, at the desktop's resolution) and windowed (a window that can be resized) instead:
+		// r_fullscreen 1, 2 and 0, applied with the page's other rows. The resolution row follows it.
+		multiDef_t *multiPtr = (multiDef_t *)item->typeData;
+		const char *const *labels = UI_DisplayModeLabels();
+		static const float values[] = { 1, 2, 0 };
+
+		memset( multiPtr, 0, sizeof( *multiPtr ) );
+		for ( int i = 0; i < 3; i++ )
+		{
+			multiPtr->cvarList[i] = String_Alloc( labels[i + 1] );
+			multiPtr->cvarValue[i] = values[i];
+		}
+		multiPtr->count = 3;
+		item->text = (char *)String_Alloc( labels[0] );
+		item->descText = String_Alloc( "Fullscreen: the display is switched to the resolution chosen. Borderless: a window over "
+			"the whole display, at the desktop's resolution, quick to switch away from. Windowed: a window that can be resized." );
+		item->action = String_Alloc( va( "%s ; uiScript displayMode ;", item->action ? item->action : "" ) );
+		Com_Printf( "Replaced full screen field with the display modes.\n" );
 	}
 
 	if ( ( item->type == ITEM_TYPE_MULTI || item->type == ITEM_TYPE_SLIDER ) && item->window.name && !Q_stricmp( item->window.name, "video_mode") && item->cvar && !Q_stricmp( item->cvar, "r_ext_texture_filter_anisotropic" ) ) {
@@ -3691,6 +3737,16 @@ const char *Item_Multi_Setting(itemDef_t *item)
  				}
  			}
  		}
+
+		// a size of the window not in the resolution row's list (its edges were dragged): as the list shows sizes
+		int width, height;
+		if ( multiPtr->strDef && item->cvar && !Q_stricmp( item->cvar, "ui_r_resolution" ) &&
+			sscanf( buff, "%dx%d", &width, &height ) == 2 )
+		{
+			static char size[32];
+			Com_sprintf( size, sizeof( size ), "%d x %d", width, height );
+			return size;
+		}
 	}
 
 #ifdef JK2_MODE
