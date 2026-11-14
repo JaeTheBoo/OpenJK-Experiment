@@ -878,7 +878,9 @@ void CG_DrawDataPadHUD( centity_t *cent )
 	CG_DrawMessageLit(cent,x,y);
 
 	cgi_R_SetColor( colorTable[CT_WHITE]);
+	cgi_R_Set2DAnchor( ANCHOR_KEEP_SHAPE );	// (its holes around the dials)
 	CG_DrawPic( 0, 0, 640, 480, cgs.media.dataPadFrame );
+	cgi_R_Set2DAnchor( ANCHOR_CENTRE );
 
 }
 

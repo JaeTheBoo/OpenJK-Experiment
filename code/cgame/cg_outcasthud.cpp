@@ -529,7 +529,9 @@ void CG_DrawOutcastDataPadHUD( centity_t *cent )
 	CG_DrawOutcastHUDRight( cent, 526, 286, qfalse );
 
 	cgi_R_SetColor( colorTable[CT_WHITE] );
+	cgi_R_Set2DAnchor( ANCHOR_KEEP_SHAPE );	// (its holes around the dials)
 	CG_DrawPic( 0, 0, 640, 480, cgs.media.dataPadFrame );
+	cgi_R_Set2DAnchor( ANCHOR_CENTRE );
 }
 
 /*

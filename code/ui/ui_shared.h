@@ -323,7 +323,17 @@ typedef struct {
 	vec4_t		borderColor;				// border color
 	vec4_t		outlineColor;				// border color
 	qhandle_t	background;					// background asset
+	int			wideAnchor;					// where its picture goes on a wide screen (wideAnchor_t, Menu_SetWideAnchors)
 } windowDef_t;
+
+// where a picture of a full-screen menu goes on a screen wider than 4:3 with r_wideUI (Menu_SetWideAnchors)
+typedef enum
+{
+	WIDE_CENTRED,			// with the centred 640x480 area, as everything else
+	WIDE_LEFT_EDGE,			// stuck to the left edge of the screen
+	WIDE_RIGHT_EDGE,		// stuck to the right edge of the screen
+	WIDE_FRAMES_PICTURE		// a picture of the whole area with frames in it: kept in its shape, over the backdrop
+} wideAnchor_t;
 
 typedef windowDef_t Window;
 

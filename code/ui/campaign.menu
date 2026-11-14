@@ -34,17 +34,7 @@
 			open				mainMenu
 		}
 
-		// Backdrop
-		itemDef
-		{
-			name				backdrop
-			style				WINDOW_STYLE_SHADER
-			rect				0 0 640 480
-			background			"gfx/menus/main_background"
-			forecolor			1 1 1 1
-			visible				1
-			decoration
-		}
+		// Backdrop: the scrolling side text under it, seen through the gaps at its sides (as in the game's menus)
 		itemDef
 		{
 			name				side_text_left
@@ -61,6 +51,16 @@
 			style				WINDOW_STYLE_SHADER
 			rect				480 0 160 480
 			background			"gfx/menus/menu_side_text_right"
+			forecolor			1 1 1 1
+			visible				1
+			decoration
+		}
+		itemDef
+		{
+			name				backdrop
+			style				WINDOW_STYLE_SHADER
+			rect				0 0 640 480
+			background			"gfx/menus/main_background"
 			forecolor			1 1 1 1
 			visible				1
 			decoration

@@ -4878,6 +4878,14 @@ qboolean ItemParse_outlinecolor( itemDef_t *item)
 	return qtrue;
 }
 
+// Jedi Academy's pictures of a whole screen with the menu's frames drawn in them, which the menu's items are placed in
+// (Menu_SetWideAnchors), and the backdrop of its other menus, put under them on a wide screen
+static const char *const wideFramesPictures[] = {
+	"gfx/menus/charmenu", "gfx/menus/sabermenu_back", "gfx/menus/load_back", "gfx/menus/datapad", "gfx/menus/datapad2",
+	"gfx/menus/mission_back", "gfx/menus/weaponmenu_back", "gfx/menus/forcemenu_back",
+};
+static qhandle_t uiWideBackdrop;
+
 /*
 ===============
 ItemParse_background
@@ -4892,6 +4900,14 @@ qboolean ItemParse_background( itemDef_t *item)
 		return qfalse;
 	}
 	item->window.background = ui.R_RegisterShaderNoMip(temp);
+	for ( size_t i = 0; i < ARRAY_LEN( wideFramesPictures ); i++ )
+	{
+		if ( !Q_stricmp( temp, wideFramesPictures[i] ) )
+		{
+			item->window.wideAnchor = WIDE_FRAMES_PICTURE;	// (if it covers the menu: Menu_SetWideAnchors)
+			uiWideBackdrop = ui.R_RegisterShaderNoMip( "gfx/menus/main_background" );
+		}
+	}
 	return qtrue;
 }
 
@@ -7283,6 +7299,47 @@ static void Menu_AddGameSettingsPage( menuDef_t *menu )
 
 /*
 ===============
+Menu_SetWideAnchors
+
+Where the pictures of a full-screen menu go on a screen wider than 4:3 (r_wideUI). The renderer centres the 640x480
+area, as the items are placed in it, and stretches what covers all of its width over the whole screen: the menu's
+backdrop. Two kinds of pictures go elsewhere:
+ - the ones under the backdrop at a side of the area, which show through the gaps at the sides of Jedi Academy's
+   backdrop (its scrolling side text): the gaps are stretched to the edges of the screen, so these are stuck to the
+   edges too;
+ - Jedi Academy's pictures of a whole screen with frames drawn in them that the menu's items are placed in (the
+   character and saber menus, the datapad; wideFramesPictures). Stretched, the frames were no longer around the items
+   (the character menu's frame around the model came apart from its bottom piece). They keep their shape, centred
+   with the items, over the backdrop of the other menus stretched to the screen.
+===============
+*/
+static void Menu_SetWideAnchors( menuDef_t *menu )
+{
+	int backdrop = menu->itemCount;
+	for ( int i = 0; i < menu->itemCount; i++ )
+	{
+		windowDef_t &w = menu->items[i]->window;
+		const qboolean wholeWidth = ( w.rectClient.x <= 0 && w.rectClient.x + w.rectClient.w >= SCREEN_WIDTH ) ? qtrue : qfalse;
+		const qboolean whole = ( wholeWidth && w.rectClient.y <= 0 && w.rectClient.y + w.rectClient.h >= SCREEN_HEIGHT ) ? qtrue : qfalse;
+		if ( w.wideAnchor == WIDE_FRAMES_PICTURE && ( !menu->fullScreen || !wholeWidth || w.style != WINDOW_STYLE_SHADER ) )
+			w.wideAnchor = WIDE_CENTRED;	// (not over the whole menu)
+		if ( backdrop == menu->itemCount && menu->fullScreen && whole && w.style == WINDOW_STYLE_SHADER && w.background )
+			backdrop = i;
+	}
+	for ( int i = 0; backdrop < menu->itemCount && i < backdrop; i++ )
+	{
+		windowDef_t &w = menu->items[i]->window;
+		if ( w.style != WINDOW_STYLE_SHADER || !w.background )
+			continue;
+		if ( w.rectClient.x <= 0 && w.rectClient.x + w.rectClient.w < SCREEN_WIDTH )
+			w.wideAnchor = WIDE_LEFT_EDGE;
+		else if ( w.rectClient.x > 0 && w.rectClient.x + w.rectClient.w >= SCREEN_WIDTH )
+			w.wideAnchor = WIDE_RIGHT_EDGE;
+	}
+}
+
+/*
+===============
 Menu_PostParse
 ===============
 */
@@ -7296,6 +7353,7 @@ void Menu_PostParse(menuDef_t *menu)
 	Menu_AddInterfaceRow( menu );
 	Menu_AddGameSettingsPage( menu );
 #endif
+	Menu_SetWideAnchors( menu );
 
 	if (menu->fullScreen)
 	{
@@ -10207,6 +10265,25 @@ void Window_Paint(Window *w, float fadeAmount, float fadeClamp, float fadeCycle)
 	}
 	else if (w->style == WINDOW_STYLE_SHADER)
 	{
+		// on a wide screen: stuck to an edge of the screen, or a picture of the menu's frames kept in its shape over
+		// the backdrop (Menu_SetWideAnchors)
+		const qboolean wideAnchored = ( w->wideAnchor != WIDE_CENTRED && DC->margin > 0 ) ? qtrue : qfalse;
+		if (wideAnchored)
+		{
+			if (w->wideAnchor == WIDE_FRAMES_PICTURE)
+			{
+				if (uiWideBackdrop)
+				{
+					DC->setColor(NULL);
+					DC->drawHandlePic(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, uiWideBackdrop);
+				}
+				ui.R_Set2DAnchor(2);
+			}
+			else
+			{
+				ui.R_Set2DAnchor(w->wideAnchor == WIDE_LEFT_EDGE ? -1 : 1);
+			}
+		}
 		if (w->flags & WINDOW_PLAYERCOLOR)
 		{
 			vec4_t	color;
@@ -10222,6 +10299,10 @@ void Window_Paint(Window *w, float fadeAmount, float fadeClamp, float fadeCycle)
 		}
 		DC->drawHandlePic(fillRect.x, fillRect.y, fillRect.w, fillRect.h, w->background);
 		DC->setColor(NULL);
+		if (wideAnchored)
+		{
+			ui.R_Set2DAnchor(0);
+		}
 	}
 
 	if (w->border == WINDOW_BORDER_FULL)

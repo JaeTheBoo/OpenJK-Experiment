@@ -2042,7 +2042,9 @@ void CG_DrawDataPadHUD( centity_t *cent )
 	CG_DrawMessageLit(cent,x,y);
 
 	cgi_R_SetColor( colorTable[CT_WHITE]);
+	cgi_R_Set2DAnchor( ANCHOR_KEEP_SHAPE );	// (around the datapad's page, as the menu's own copy of it is)
 	CG_DrawPic( 0, 0, 640, 480, cgs.media.dataPadFrame );
+	cgi_R_Set2DAnchor( ANCHOR_CENTRE );
 
 }
 
