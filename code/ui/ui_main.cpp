@@ -921,15 +921,29 @@ Jedi Outcast's campaign
 
 The campaign chooser starts this program with Jedi Outcast's game data beneath Jedi Academy's when it
 knows where Jedi Outcast is installed (fs_outcastpath). New Game then asks which story to play
-(campaignMenu, ui/campaign.menu) and remembers the answer in g_campaign, which saved games keep.
+(campaignMenu, ui/campaign.menu, or in Jedi Outcast's menus campaignOutcastStyleMenu,
+ui/campaign_outcaststyle.menu) and remembers the answer in g_campaign, which saved games keep.
 Jedi Outcast's story has no character to create: the player is Kyle Katarn, played with Jedi
 Academy's remade model, so its New Game goes from the difficulty choice straight into its first level.
+Jedi Academy's creates one, which only Jedi Academy's menus can, so choosing it in Jedi Outcast's
+menus puts Jedi Academy's on first (UI_ApplyInterfaceStyle), at their choice of difficulty.
 ===============
 */
 static void UI_SetSexandSoundForModel( const char *char_model );
 void UI_ParseMenu( const char *menuFile );
 
 static const char OUTCAST_CAMPAIGN_MENU[] = "campaignMenu";
+static const char OUTCAST_STYLE_CAMPAIGN_MENU[] = "campaignOutcastStyleMenu";	// (the same, in Jedi Outcast's menus)
+
+// After a change of interface (UI_ApplyInterfaceStyle, below), the menu it comes back on
+typedef enum
+{
+	UI_REOPEN_NOTHING,
+	UI_REOPEN_GAME_OPTIONS,	// Setup at its Game Options page (Setup's Interface row)
+	UI_REOPEN_NEW_GAME		// New Game at its choice of difficulty (New Game's choice of story)
+} uiReopen_t;
+
+static void UI_ApplyInterfaceStyle( uiReopen_t reopen );
 
 static qboolean UI_OutcastDataAvailable( void )
 {
@@ -941,12 +955,12 @@ static qboolean UI_IsOutcastCampaign( void )
 	return ( UI_OutcastDataAvailable() && !Q_stricmp( Cvar_VariableString( "g_campaign" ), "outcast" ) ) ? qtrue : qfalse;
 }
 
-// Loads the menu that asks which story to play (only when there is a choice)
+// Loads the menu that asks which story to play (only when there is a choice), in the look of the menus loaded
 static void UI_LoadOutcastCampaignMenu( void )
 {
-	if ( UI_OutcastDataAvailable() && !UI_OutcastStyle() )	// (in Jedi Academy's style)
+	if ( UI_OutcastDataAvailable() )
 	{
-		UI_ParseMenu( "ui/campaign.menu" );
+		UI_ParseMenu( UI_OutcastStyle() ? "ui/campaign_outcaststyle.menu" : "ui/campaign.menu" );
 	}
 }
 
@@ -955,6 +969,22 @@ static void UI_ChooseCampaign( const char *campaign )
 {
 	const qboolean outcast = ( !Q_stricmp( campaign, "outcast" ) && UI_OutcastDataAvailable() ) ? qtrue : qfalse;
 	Cvar_Set( "g_campaign", outcast ? "outcast" : "academy" );
+
+	if ( UI_OutcastStyle() )
+	{
+		if ( outcast )
+		{// Jedi Outcast's own choice of difficulty, whose Begin starts its story
+			Menus_CloseAll();
+			Menus_OpenByName( "newgameMenu" );
+		}
+		else
+		{// Jedi Academy's New Game goes on to create a character, which only its menus can: put them on,
+		 // then carry on there at their choice of difficulty (UI_ReopenAfterInterfaceChange)
+			Cvar_Set( "ui_style", "academy" );
+			UI_ApplyInterfaceStyle( UI_REOPEN_NEW_GAME );
+		}
+		return;
+	}
 
 	// Both stories go on to Jedi Academy's choice of difficulty (opened directly, not through
 	// UI_OutcastCampaign_OpenMenu, which would send it back here)
@@ -991,15 +1021,22 @@ static void UI_StartOutcastCampaign( void )
 
 // Called when a menu script opens a menu. Returns qtrue if the menu was replaced:
 //  - New Game's first menu (the difficulty choice) is preceded by the choice of story, when Jedi
-//    Outcast's game data is there to offer one;
+//    Outcast's game data is there to offer one (newgamefirstMenu in Jedi Academy's menus, newgameMenu
+//    in Jedi Outcast's: the one their main menu opens);
 //  - in Jedi Outcast's story, the character creation that follows the difficulty choice starts the
 //    game instead.
 qboolean UI_OutcastCampaign_OpenMenu( const char *menuName )
 {
-	if ( !Q_stricmp( menuName, "newgamefirstMenu" ) && UI_OutcastDataAvailable() && Menus_FindByName( OUTCAST_CAMPAIGN_MENU ) )
+	const char *choiceMenu = UI_OutcastStyle() ? OUTCAST_STYLE_CAMPAIGN_MENU : OUTCAST_CAMPAIGN_MENU;
+	const char *newGameMenu = UI_OutcastStyle() ? "newgameMenu" : "newgamefirstMenu";
+	menuDef_t *choice = UI_OutcastDataAvailable() ? Menus_FindByName( choiceMenu ) : NULL;
+	if ( !Q_stricmp( menuName, newGameMenu ) && choice )
 	{
 		Menus_CloseAll();
-		Menus_OpenByName( OUTCAST_CAMPAIGN_MENU );
+		// (the arrow keys go on from the first story, which its onOpen gives the focus, not from the button
+		// they reached the last time)
+		choice->cursorItem = -1;
+		Menus_OpenByName( choiceMenu );
 		return qtrue;
 	}
 	if ( !Q_stricmp( menuName, "characterMenu" ) && UI_IsOutcastCampaign() )
@@ -1017,39 +1054,49 @@ The Interface row
 Setup's Game Options page has a row for whose menus and HUD these are (Menu_AddInterfaceRow, ui_shared.cpp), when
 Jedi Outcast's game data is there. Changing it changes ui_style, then "uiScript interfaceStyle" puts the other
 interface on at once: vid_restart, then Setup again on its Game Options page, in the other menus. (New Game and loading
-a saved game also set ui_style, to the story's own: UI_StartOutcastCampaign, SG_ReadSavegame.)
+a saved game also set ui_style, to the story's own: UI_StartOutcastCampaign, SG_ReadSavegame. Choosing Jedi Academy's
+story in Jedi Outcast's menus puts Jedi Academy's on the same way, back at New Game: UI_ChooseCampaign.)
 ===============
 */
-static qboolean ui_reopenGameOptions;	// (kept through the restart: this module is not unloaded)
+static uiReopen_t ui_reopen;	// (kept through the restart: this module is not unloaded)
 
-static void UI_ApplyInterfaceStyle( void )
+static void UI_ApplyInterfaceStyle( uiReopen_t reopen )
 {
 	const qboolean outcast = ( !Q_stricmp( Cvar_VariableString( "ui_style" ), "outcast" ) && UI_OutcastDataAvailable() ) ? qtrue : qfalse;
 	if ( outcast == UI_OutcastStyle() )
 	{
 		return;
 	}
-	ui_reopenGameOptions = qtrue;
+	ui_reopen = reopen;
 	if ( cls.state == CA_DISCONNECTED )
 	{
 		ui.Cmd_ExecuteText( EXEC_APPEND, "vid_restart\n" );	// (then the main menu is asked for: UI_MainMenu)
 	}
 	else
-	{
+	{// (only Setup changes it during a game)
 		ui.Cmd_ExecuteText( EXEC_APPEND, "vid_restart\nuimenu ingameSetupMenu\n" );
 	}
 }
 
-// As the menus come back after that restart: Setup (setupMenu or ingameSetupMenu, the same names in both games'
-// menus), shown at its Game Options page. Returns qtrue if it was opened
-static qboolean UI_ReopenGameOptions( const char *setupMenu )
+// As the menus come back after that restart, in the other interface (the menus named here have the same names in both
+// games' menus):
+//  - Setup (setupMenu or ingameSetupMenu, as asked for), shown at its Game Options page;
+//  - New Game at its choice of difficulty (newgamefirstMenu: only Jedi Academy's menus are asked for it), opened
+//    directly, as the story has been chosen.
+// Returns qtrue if one was opened
+static qboolean UI_ReopenAfterInterfaceChange( const char *setupMenu )
 {
-	if ( !ui_reopenGameOptions )
+	const uiReopen_t reopen = ui_reopen;
+	if ( reopen == UI_REOPEN_NOTHING )
 	{
 		return qfalse;
 	}
-	ui_reopenGameOptions = qfalse;
+	ui_reopen = UI_REOPEN_NOTHING;
 	Menus_CloseAll();
+	if ( reopen == UI_REOPEN_NEW_GAME )
+	{
+		return Menus_ActivateByName( "newgamefirstMenu" ) ? qtrue : qfalse;
+	}
 	menuDef_t *menu = Menus_ActivateByName( setupMenu );
 	if ( !menu )
 	{
@@ -1245,7 +1292,7 @@ static qboolean UI_RunMenuScript ( const char **args )
 		}
 		else if (Q_stricmp(name, "interfaceStyle") == 0)
 		{//Setup's Interface row changed ui_style: put that interface on
-			UI_ApplyInterfaceStyle();
+			UI_ApplyInterfaceStyle( UI_REOPEN_GAME_OPTIONS );
 		}
 #endif
 		else if (Q_stricmp(name, "startgame") == 0)
@@ -4390,7 +4437,7 @@ void UI_InGameMenu(const char*menuID)
 	Menus_CloseByName("mainhud");
 
 #ifndef JK2_MODE
-	if ( menuID && !Q_stricmp( menuID, "ingameSetupMenu" ) && UI_ReopenGameOptions( menuID ) )
+	if ( menuID && !Q_stricmp( menuID, "ingameSetupMenu" ) && UI_ReopenAfterInterfaceChange( menuID ) )
 	{//(after the Interface row's restart)
 		ui.Key_SetCatcher( KEYCATCH_UI );
 		return;
@@ -4438,7 +4485,7 @@ void UI_MainMenu(void)
 	ui.Key_SetCatcher( KEYCATCH_UI );
 
 #ifndef JK2_MODE
-	if ( UI_ReopenGameOptions( "setupMenu" ) )
+	if ( UI_ReopenAfterInterfaceChange( "setupMenu" ) )
 	{//(after the Interface row's restart)
 		return;
 	}

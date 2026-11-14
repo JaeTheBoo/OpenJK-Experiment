@@ -79,9 +79,9 @@ Characters become physics ragdolls when they die. The muscle-driven behaviours a
 
 | Setting | Default | What it does |
 | - | - | - |
-| `fs_outcastpath` | (empty) | Jedi Outcast's `GameData` folder. Set by the launcher from `campaigns.ini`. With it, New Game offers Jedi Outcast's story. |
+| `fs_outcastpath` | (empty) | Jedi Outcast's `GameData` folder. Set by the launcher from `campaigns.ini`. With it, New Game offers Jedi Outcast's story, in either game's menus. |
 | `g_campaign` | `academy` | Which story is being played: `academy` or `outcast`. Set by New Game and kept in saved games. |
-| `ui_style` | `academy` | Whose menus and HUD to use: `academy` or `outcast` (needs Jedi Outcast's game data). Also in Setup → Options as "Interface". New Game and loading a saved game switch it to that story's own, and `--campaign=outcast-ja` starts with `outcast`. |
+| `ui_style` | `academy` | Whose menus and HUD to use: `academy` or `outcast` (needs Jedi Outcast's game data). Also in Setup → Options as "Interface". New Game and loading a saved game switch it to that story's own, and `--campaign=outcast-ja` starts with `outcast`. Choosing Jedi Academy's story at New Game in Jedi Outcast's menus switches at once, as its character is created in Jedi Academy's menus. |
 
 ### Graphics
 

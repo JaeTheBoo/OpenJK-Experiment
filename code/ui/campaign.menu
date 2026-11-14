@@ -5,6 +5,7 @@
 // this menu instead of going straight to the choice of difficulty (UI_OutcastCampaign_OpenMenu in
 // code/ui/ui_main.cpp). "uiScript campaign outcast|academy" sets g_campaign, which saved games keep,
 // and carries on to the difficulty menu. The art shown is Jedi Academy's own, referenced by name.
+// (In Jedi Outcast's menus, the same choice is campaign_outcaststyle.menu.)
 //----------------------------------------------------------------------------------------------
 {
 	menuDef
