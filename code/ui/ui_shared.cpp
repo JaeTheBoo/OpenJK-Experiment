@@ -83,6 +83,9 @@ static qboolean g_editingField = qfalse;
 
 static itemDef_t *g_bindItem = NULL;
 static itemDef_t *g_editItem = NULL;
+#ifndef JK2_MODE
+static void GameSettings_Forget( void );
+#endif
 static itemDef_t *itemCapture = NULL;   // item that has the mouse captured ( if any )
 
 #define DOUBLE_CLICK_DELAY 300
@@ -1324,46 +1327,73 @@ static void Item_ApplyHacks( itemDef_t *item ) {
 
 /*
 ================
-The rows of the "More Video" page, scrolled
+The rows of a Setup page, scrolled
 
-When there are more rows than the page has room for (Menu_AddEffectRows), as many as fit are shown with a scroll bar
-beside them: its arrows move a row, its track a page, its thumb can be dragged, and the mouse wheel over the rows
-scrolls them too. The rows out of view are hidden (they take no focus or click), and a row the keys move the focus to
-is scrolled into view.
+When a page has more rows than it has room for (the More Video page, Menu_AddEffectRows; the Game Settings page,
+Menu_AddGameSettingsPage), as many as fit are shown with a scroll bar beside them: its arrows move a row, its track a
+page, its thumb can be dragged, and the mouse wheel over the rows scrolls them too. The rows out of view are hidden
+(they take no focus or click), and a row the keys move the focus to is scrolled into view. Some rows can be headings
+(decorations), which the keys pass over.
 ================
 */
 void Item_UpdatePosition(itemDef_t *item);
 
-#define ROW_SCROLL_BAR	12.0f		// the width of the bar, and the height of its arrows and thumb
+#define ROW_SCROLL_BAR			12.0f	// the width of the bar, and the height of its arrows and thumb
+#define ROW_SCROLL_MAX_ROWS		64
+#define ROW_SCROLL_MAX_SHOWN	24
+
+typedef enum
+{
+	ROW_SCROLL_MORE_VIDEO,
+	ROW_SCROLL_GAME_SETTINGS
+} rowScrollPage_t;
 
 typedef struct {
-	menuDef_t	*menu;
-	itemDef_t	*driverButton;		// shown with the page: the bar is shown then
-	itemDef_t	*rows[24];
-	const char	*enter[24];			// what a row does when the mouse comes over it, by the place it is shown at
-	int			numRows, visible, first;
-	float		left, firstY, pitch, barX;
-	bool		dragging;
-	float		dragOffset;
+	menuDef_t		*menu;
+	rowScrollPage_t	page;
+	itemDef_t		*anchor;			// shown with the page: the bar is shown then
+	itemDef_t		*rows[ROW_SCROLL_MAX_ROWS];
+	const char		*enter[ROW_SCROLL_MAX_SHOWN];	// what a row does when the mouse comes over it, by the place it is shown at
+	int				numRows, visible, first;
+	float			left, firstY, pitch, barX;
+	bool			wheelOnValues;		// the wheel over the value of a row of choices changes it, instead of scrolling
+	bool			dragging;
+	float			dragOffset;
 } rowScroll_t;
 
-static rowScroll_t rowScrolls[4];	// by menu: the main and the in-game setup each have the page
+static rowScroll_t rowScrolls[8];	// by menu and page: the main and the in-game setup of either game have both pages
 
-static rowScroll_t *RowScroll_For( const menuDef_t *menu )
+// the slot of a menu's page: the one it had (the same menu again, read without the menus being reset first), else a
+// free one; NULL if none is left
+static rowScroll_t *RowScroll_Slot( const menuDef_t *menu, rowScrollPage_t page )
+{
+	rowScroll_t *freeSlot = NULL;
+	for ( size_t i = 0; i < ARRAY_LEN( rowScrolls ); i++ )
+	{
+		if ( rowScrolls[i].menu == menu && rowScrolls[i].page == page )
+			return &rowScrolls[i];
+		if ( !rowScrolls[i].menu && !freeSlot )
+			freeSlot = &rowScrolls[i];
+	}
+	return freeSlot;
+}
+
+// all of them forgotten, as the menus are read again (Menu_Reset)
+static void RowScroll_Forget( void )
+{
+	memset( rowScrolls, 0, sizeof( rowScrolls ) );
+}
+
+// the menu's page of scrolled rows that is shown, if any
+static rowScroll_t *RowScroll_Shown( const menuDef_t *menu )
 {
 	for ( size_t i = 0; menu && i < ARRAY_LEN( rowScrolls ); i++ )
 	{
-		if ( rowScrolls[i].menu == menu )
+		const rowScroll_t &rs = rowScrolls[i];
+		if ( rs.menu == menu && rs.anchor && ( rs.anchor->window.flags & WINDOW_VISIBLE ) )
 			return &rowScrolls[i];
 	}
 	return NULL;
-}
-
-// the menu's rows when they scroll and the page is shown
-static rowScroll_t *RowScroll_Shown( const menuDef_t *menu )
-{
-	rowScroll_t *rs = RowScroll_For( menu );
-	return rs && rs->driverButton && ( rs->driverButton->window.flags & WINDOW_VISIBLE ) ? rs : NULL;
 }
 
 // the rows at their places for the first one shown, the ones out of view hidden
@@ -1376,7 +1406,8 @@ static void RowScroll_Place( rowScroll_t &rowScroll )
 		if ( at >= 0 && at < rowScroll.visible )
 		{
 			row->window.rectClient.y = rowScroll.firstY + at * rowScroll.pitch;
-			row->mouseEnter = rowScroll.enter[at];
+			if ( !( row->window.flags & WINDOW_DECORATION ) )
+				row->mouseEnter = rowScroll.enter[at];
 			row->window.flags |= WINDOW_VISIBLE;
 			Item_UpdatePosition( row );
 		}
@@ -1461,17 +1492,25 @@ static qboolean RowScroll_HandleKey( menuDef_t *menu, int key, qboolean down )
 		}
 		return qfalse;
 	}
-	// the keys moving the focus past the rows shown: one more row in view first (the menu then moves the focus to it)
+	// the keys moving the focus past the rows shown: the next row it can go to (past headings) in view first, with
+	// the heading just above it when going up (the menu then moves the focus to it)
 	const int step = ( key == A_CURSOR_UP || key == A_KP_8 ) ? -1 : ( key == A_CURSOR_DOWN || key == A_KP_2 || key == A_TAB ) ? 1 : 0;
 	for ( int i = 0; step && i < rowScroll.numRows; i++ )
 	{
-		const int next = i + step;
-		if ( ( rowScroll.rows[i]->window.flags & WINDOW_HASFOCUS ) && next >= 0 && next < rowScroll.numRows
-			&& ( next < rowScroll.first || next >= rowScroll.first + rowScroll.visible ) )
+		if ( !( rowScroll.rows[i]->window.flags & WINDOW_HASFOCUS ) )
+			continue;
+		int next = i + step;
+		while ( next >= 0 && next < rowScroll.numRows && ( rowScroll.rows[next]->window.flags & WINDOW_DECORATION ) )
+			next += step;
+		if ( next >= 0 && next < rowScroll.numRows )
 		{
-			RowScroll_By( rowScroll, step );
-			break;
+			const int top = ( step < 0 && next > 0 && ( rowScroll.rows[next - 1]->window.flags & WINDOW_DECORATION ) ) ? next - 1 : next;
+			if ( top < rowScroll.first )
+				RowScroll_By( rowScroll, top - rowScroll.first );
+			else if ( next >= rowScroll.first + rowScroll.visible )
+				RowScroll_By( rowScroll, next - ( rowScroll.first + rowScroll.visible - 1 ) );
 		}
+		break;
 	}
 	if ( step )
 	{
@@ -1487,6 +1526,15 @@ static qboolean RowScroll_HandleKey( menuDef_t *menu, int key, qboolean down )
 	}
 	if ( key == A_MWHEELUP || key == A_MWHEELDOWN )
 	{
+		for ( int i = rowScroll.first; rowScroll.wheelOnValues && i < rowScroll.first + rowScroll.visible && i < rowScroll.numRows; i++ )
+		{
+			itemDef_t *row = rowScroll.rows[i];
+			if ( row->type == ITEM_TYPE_MULTI && ( row->window.flags & WINDOW_VISIBLE ) && Rect_ContainsPoint( &row->window.rect, cx, cy ) &&
+				 cx >= row->textRect.x + row->textRect.w )
+			{
+				return qfalse;	// (the row's own: the next or the last value)
+			}
+		}
 		RowScroll_By( rowScroll, key == A_MWHEELUP ? -1 : 1 );
 		return qtrue;
 	}
@@ -1513,8 +1561,13 @@ static qboolean RowScroll_HandleKey( menuDef_t *menu, int key, qboolean down )
 // the thumb dragged; qtrue while it is
 static qboolean RowScroll_MouseMove( menuDef_t *menu, float y )
 {
-	rowScroll_t *rs = RowScroll_For( menu );
-	if ( !rs || !rs->dragging )
+	rowScroll_t *rs = NULL;
+	for ( size_t i = 0; menu && i < ARRAY_LEN( rowScrolls ); i++ )
+	{
+		if ( rowScrolls[i].menu == menu && rowScrolls[i].dragging )
+			rs = &rowScrolls[i];
+	}
+	if ( !rs )
 	{
 		return qfalse;
 	}
@@ -1665,12 +1718,7 @@ static void Menu_AddEffectRows( menuDef_t *menu, itemDef_t *driverButton )
 
 	// as many rows as fit above the driver info, at the bottom of the screen; with more, a scroll bar (RowScroll_*)
 	const int visible = Q_min( numRows, Q_max( 4, (int)( ( SCREEN_HEIGHT - 4 - ( barHeight + 2 ) - 2 - firstY ) / pitch ) ) );
-	rowScroll_t *rs = RowScroll_For( menu );	// (the same menu again: ui_load, vid_restart)
-	for ( size_t i = 0; !rs && i < ARRAY_LEN( rowScrolls ); i++ )
-	{
-		if ( !rowScrolls[i].menu )
-			rs = &rowScrolls[i];
-	}
+	rowScroll_t *rs = RowScroll_Slot( menu, ROW_SCROLL_MORE_VIDEO );
 	static rowScroll_t unused;			// (more menus with the page than slots: those don't scroll)
 	rowScroll_t &rowScroll = rs ? *rs : unused;
 	memset( &rowScroll, 0, sizeof( rowScroll ) );
@@ -1694,7 +1742,8 @@ static void Menu_AddEffectRows( menuDef_t *menu, itemDef_t *driverButton )
 	if ( numRows > visible )
 	{
 		rowScroll.menu = menu;		// (the bar and its keys: only then)
-		rowScroll.driverButton = driverButton;
+		rowScroll.page = ROW_SCROLL_MORE_VIDEO;
+		rowScroll.anchor = driverButton;
 	}
 
 	const float driverY = firstY + visible * pitch + 2;
@@ -6288,6 +6337,14 @@ void Menu_Reset(void)
 	}
 
 	menuCount = 0;
+
+	// what pointed at the items of the menus, which are read again
+	RowScroll_Forget();
+#ifndef JK2_MODE
+	GameSettings_Forget();
+#endif
+	g_editingField = qfalse;
+	g_editItem = NULL;
 }
 
 /*
@@ -6411,6 +6468,740 @@ static void Menu_AddInterfaceRow( menuDef_t *menu )
 	menu->items[menu->itemCount++] = row;
 	Com_Printf( "%s: added the Interface row at %.0f\n", menu->window.name ? menu->window.name : "menu", y );
 }
+
+/*
+===============
+The Game Settings page of Setup
+
+Setup gets a page more, Game Settings, for the settings this version adds that take effect at once, during a game too
+(README.md, "Settings added in this fork"; left out are the ones the game sets, ui_style, which is the Interface row of
+Game Options, and the ones that wait for a restart: r_glsl, r_smoothLightmaps, r_sampleShading, r_alphaToCoverage,
+r_wideUI, r_vkRayTracing, r_vkDevice, r_vkValidation, com_jobThreads). Menu_AddGameSettingsPage builds it when a Setup
+menu of either game has been read, out of the menu's own items, so that it looks like the rest of the menu:
+ - its button, a copy of the Defaults button, below the last of the page buttons; it shows the page the way they show
+   theirs, and they (and the menu's opening) hide it;
+ - a row for each setting, a copy of the first row of the Game Options page. A setting with a few values cycles
+   through them as the other rows do. A number is typed in (GameSettings_EditKey): Enter sets the setting to it if it
+   is a number in the setting's range; otherwise the setting keeps its value, and the row's description says why for a
+   few seconds. Escape leaves the setting as it was. Headings are put between the groups of rows;
+ - the rows scroll with a scroll bar beside them (RowScroll_*). The mouse wheel over the value of a row of choices
+   changes it, anywhere else over the rows it scrolls them.
+The rows read their settings as they are drawn, so they always show the current values, also ones changed from the
+console. Each row's description, at the bottom of the screen, says what the setting does and gives its name.
+===============
+*/
+qboolean Item_TextField_HandleKey(itemDef_t *item, int key);
+
+typedef struct {
+	const char	*cvar;			// NULL: a heading, of the rows below it
+	const char	*label;
+	const char	*choices;		// the names of its values 0, 1, 2... between |s ("Off" and "On": the menu's own words); NULL: a number
+	float		min, max;		// a number's range
+	qboolean	whole;			// a number without decimals
+	const char	*defaultValue;	// the value the game gives it (set here if the game has not made the setting yet, before the first level)
+	int			flags;			// its flags then
+	const char	*avail;			// where the row is: NULL everywhere, "vulkan" with the Vulkan renderer, else where the renderer sets this cvar
+	const char	*desc;
+} gameSetting_t;
+
+#define GS_HEADING( label )										{ NULL, label, NULL, 0, 0, qfalse, NULL, 0, NULL, NULL }
+#define GS_CHOICES( cvar, label, choices, def, flags, avail, desc )	{ cvar, label, choices, 0, 0, qfalse, def, flags, avail, desc }
+#define GS_NUMBER( cvar, label, min, max, def, flags, avail, desc )	{ cvar, label, NULL, min, max, qfalse, def, flags, avail, desc }
+#define GS_WHOLE( cvar, label, min, max, def, flags, avail, desc )		{ cvar, label, NULL, min, max, qtrue, def, flags, avail, desc }
+
+static const gameSetting_t gameSettings[] = {
+	GS_HEADING( "Movement" ),
+	GS_CHOICES( "g_momentumMovement", "Momentum Movement:", "Off|On", "1", CVAR_ARCHIVE, NULL,
+		"Speeding up, braking and turning take time. Off: exactly the original movement." ),
+	GS_NUMBER( "g_momentumAccelerationTime", "Acceleration Time:", 0, 5, "0.25", CVAR_ARCHIVE, NULL,
+		"Seconds from standing still to full running speed." ),
+	GS_NUMBER( "g_momentumStopTime", "Stopping Time:", 0, 5, "0.25", CVAR_ARCHIVE, NULL,
+		"Seconds to brake from full speed to a stop after letting go of the keys." ),
+	GS_NUMBER( "g_momentumTurnTime", "Turning Time:", 0, 5, "0.12", CVAR_ARCHIVE, NULL,
+		"Seconds to swing toward a new direction. Longer feels heavier and skids more." ),
+	GS_NUMBER( "g_momentumOverspeedDecayTime", "Overspeed Decay:", 0, 10, "0.6", CVAR_ARCHIVE, NULL,
+		"Seconds to lose a running speed's worth of extra speed, as after a fast jump." ),
+	GS_NUMBER( "g_momentumAirControl", "Air Control:", 0, 4, "1.0", CVAR_ARCHIVE, NULL,
+		"Steering in the air. 1: the original, 0: none." ),
+
+	GS_HEADING( "Lightsaber" ),
+	GS_CHOICES( "g_saberGuard", "Saber Guard:", "Automatic|Manual|Manual, Logged", "1", CVAR_ARCHIVE, NULL,
+		"Manual: block while holding alt-attack, at a cost in Force. Automatic: the original. Logged prints blocks." ),
+	GS_CHOICES( "g_saberReach", "Saber Reach:", "Off|On|On, Logged|Hold Poses", "1", CVAR_ARCHIVE, NULL,
+		"The saber arm reaches for the blaster bolts it deflects. Logged prints them, Hold Poses is for tests." ),
+	GS_CHOICES( "g_saberSlicing", "Saber Slicing:", "Off|On", "1", CVAR_ARCHIVE, NULL,
+		"Saber blows cut characters where the blade passes. Off: the game's own dismemberment." ),
+
+	GS_HEADING( "Ragdolls" ),
+	GS_CHOICES( "g_ragdoll", "Ragdolls:", "Off|On", "1", CVAR_ARCHIVE, NULL,
+		"Characters become physics ragdolls when they die. Off: the canned death animations." ),
+	GS_CHOICES( "g_ragdollKnockdowns", "Ragdoll Knockdowns:", "Off|On", "1", CVAR_ARCHIVE, NULL,
+		"Characters knocked down by Force Push or Pull fall as ragdolls and get back up." ),
+	GS_NUMBER( "g_ragdollImpulseScale", "Impulse Scale:", 0, 10, "1.0", CVAR_ARCHIVE, NULL,
+		"How hard hits push bodies around." ),
+	GS_NUMBER( "g_ragdollMuscleStrength", "Muscle Strength:", 0, 4, "0", CVAR_ARCHIVE, NULL,
+		"0: limp. 1: bodies stagger, reach out as they fall and keep their heads up. 2: twice as strong." ),
+	GS_NUMBER( "g_ragdollWritheChance", "Writhe Chance:", 0, 1, "0", CVAR_ARCHIVE, NULL,
+		"Chance that a dying character moves weakly on the ground before going limp." ),
+	GS_CHOICES( "g_ragdollHitReactions", "Hit Reactions:", "Off|On", "0", CVAR_ARCHIVE, NULL,
+		"Living characters flinch physically when hit, while they keep fighting." ),
+	GS_NUMBER( "g_ragdollHitReactionScale", "Hit Reaction Scale:", 0, 4, "0.4", CVAR_ARCHIVE, NULL,
+		"How hard hits jolt living characters, compared with how hard they push corpses." ),
+	GS_CHOICES( "g_ragdollShotReactions", "Shot Reactions:", "Off|On", "0", CVAR_ARCHIVE, NULL,
+		"A hit takes control of an NPC: it clutches the wound, staggers and recovers. Bosses only flinch." ),
+	GS_CHOICES( "g_ragdollStumbles", "Stumbles:", "Off|On", "0", CVAR_ARCHIVE, NULL,
+		"Hits add up and can make NPCs stumble and fall over." ),
+	GS_NUMBER( "g_ragdollBalance", "Balance:", 100, 20000, "1300", CVAR_ARCHIVE, NULL,
+		"How much push a character takes in a short time before it stumbles. Bigger is steadier." ),
+
+	GS_HEADING( "Graphics" ),
+	GS_CHOICES( "r_ssao", "Ambient Occlusion:", "Off|On", "0", CVAR_ARCHIVE_ND, "r_postAvail",
+		"Soft shading in corners and where things meet." ),
+	GS_NUMBER( "r_ssaoRadius", "Occlusion Radius:", 1, 256, "48", CVAR_ARCHIVE_ND, "r_postAvail",
+		"How far, in game units, a surface still shades its surroundings." ),
+	GS_NUMBER( "r_ssaoStrength", "Occlusion Strength:", 0, 10, "2", CVAR_ARCHIVE_ND, "r_postAvail",
+		"How dark the ambient occlusion is." ),
+	GS_CHOICES( "r_bloom", "Bloom:", "Off|On", "0", CVAR_ARCHIVE_ND, "r_postAvail",
+		"A soft glow around the brightest parts of the picture." ),
+	GS_NUMBER( "r_bloomThreshold", "Bloom Threshold:", 0, 1, "0.8", CVAR_ARCHIVE_ND, "r_postAvail",
+		"How bright a pixel must be to glow." ),
+	GS_NUMBER( "r_bloomIntensity", "Bloom Intensity:", 0, 4, "0.5", CVAR_ARCHIVE_ND, "r_postAvail",
+		"How strong the glow is." ),
+	GS_CHOICES( "r_smaa", "SMAA:", "Off|On", "0", CVAR_ARCHIVE_ND, "r_smaaAvail",
+		"Smooths edges without blurring textures. Works with or without anti-aliasing." ),
+	GS_NUMBER( "r_sharpen", "Sharpening:", 0, 1, "0", CVAR_ARCHIVE_ND, "r_postAvail",
+		"Sharpening of the 3D view. 0: off." ),
+	GS_NUMBER( "r_lightShafts", "Light Shafts:", 0, 2, "0", CVAR_ARCHIVE_ND, "r_postAvail",
+		"Rays of sunlight through gaps and around edges, on levels with a sun. 0: off, 1: normal." ),
+	GS_NUMBER( "r_eyeAdaptation", "Eye Adaptation:", 0, 2, "0", CVAR_ARCHIVE_ND, "r_postAvail",
+		"The view brightens in dark places and dims in bright ones. 0: off, 1: normal." ),
+	GS_CHOICES( "r_dlightGLSL", "Shader Dynamic Lights:", "Off|On|Detailed", "0", CVAR_ARCHIVE_ND, "r_glslAvail",
+		"Light of sabers, blasters, explosions follows the shape of what it falls on. Detailed: the bumps too." ),
+	GS_CHOICES( "r_lampLighting", "Lamp Lighting:", "Off|With Ray Tracing|Always", "1", CVAR_ARCHIVE_ND, NULL,
+		"Characters lit by the level's own lamps, each from its side." ),
+	GS_CHOICES( "r_softParticles", "Soft Particles:", "Off|On", "1", CVAR_ARCHIVE_ND, "r_softAvail",
+		"Smoke, sparks and glows fade where they meet walls and floors, not in a hard line." ),
+	GS_NUMBER( "r_surfaceSpriteRange", "Grass Distance:", 0.25f, 8, "3", CVAR_ARCHIVE_ND, NULL,
+		"Multiplies how far away grass, bushes and the like are still drawn." ),
+
+	GS_HEADING( "Shadows" ),
+	GS_NUMBER( "r_shadowSoftness", "Shadow Softness:", 0, 4, "1", CVAR_ARCHIVE_ND, NULL,
+		"Width of the soft edge of volumetric shadows. 0: hard edges." ),
+	GS_WHOLE( "r_shadowSamples", "Shadow Samples:", 1, 16, "8", CVAR_ARCHIVE_ND, NULL,
+		"How many shadow volumes make up one soft shadow." ),
+	GS_NUMBER( "r_shadowStrength", "Shadow Strength:", 0, 2, "1", CVAR_ARCHIVE_ND, NULL,
+		"How dark shadows are." ),
+	GS_NUMBER( "r_shadowTilt", "Shadow Tilt:", 0, 4, "1", CVAR_ARCHIVE_ND, NULL,
+		"How much shadows lean away from the light." ),
+	GS_CHOICES( "r_shadowSelf", "Self Shadowing:", "Off|On", "0", CVAR_ARCHIVE_ND, NULL,
+		"Characters are darkened by shadows too." ),
+	GS_CHOICES( "r_shadowMaps", "Shadow Maps:", "Off|On", "0", CVAR_ARCHIVE_ND, "r_shadowMapsAvail",
+		"Volumetric shadows also draw shadow maps, as Soft shadows do." ),
+	GS_CHOICES( "r_rtLamps", "Shadows From Lamps:", "Off|On", "1", CVAR_ARCHIVE_ND, "r_rtAvail",
+		"Ray traced shadows fall away from the level's lamps. Off: from its average light direction." ),
+
+	GS_HEADING( "Vulkan" ),
+	GS_CHOICES( "r_rayTracing", "Ray Tracing:", "Off|Medium|High", "0", CVAR_ARCHIVE_ND, "r_rtAvail",
+		"Exact character shadows; light of sabers, blasters, explosions stops at walls. High: smoother, slower." ),
+	GS_CHOICES( "r_lowLatency", "Low Latency:", "Off|On", "1", CVAR_ARCHIVE_ND, "vulkan",
+		"Shorter input lag: each frame's input is read as late as possible." ),
+	GS_CHOICES( "r_adaptiveVsync", "Adaptive Vsync:", "Off|On", "1", CVAR_ARCHIVE_ND, "vulkan",
+		"With vsync on, a late frame tears instead of waiting a whole refresh." ),
+
+	GS_HEADING( "Debugging" ),
+	GS_CHOICES( "g_ragdollDebug", "Ragdoll Debug:", "Off|On", "0", 0, NULL,
+		"Prints each ragdoll's behaviour changes to the console. Not saved." ),
+	GS_CHOICES( "r_postDebug", "Post Debug:", "Off|On", "0", 0, "r_postAvail",
+		"Runs the post-processing steps without any effect: the picture must not change. Not saved." ),
+	GS_CHOICES( "r_rtDebug", "Ray Tracing Debug:", "Off|Darken|Only", "0", 0, "r_rtAvail",
+		"Darkens the view where rays to the sun are blocked. Only: shows only that. Not saved." ),
+	GS_CHOICES( "r_vkProfile", "Vulkan Profiling:", "Off|On", "0", 0, "vulkan",
+		"Reports where the renderer waits long for the GPU. Not saved." ),
+};
+
+static const char GAME_SETTINGS_GROUP[] = "gamesettings";
+static const char GAME_SETTINGS_BUTTON[] = "gamesettingsmenubutton";
+static const char GAME_SETTINGS_BAR[] = "gamesettings_glow";
+static const char GAME_SETTINGS_ENTRY[] = "ui_gameSettingEntry";	// what is being typed into a row
+
+static itemDef_t	*gameSettingEdited;			// the row being typed into (its cvar is GAME_SETTINGS_ENTRY meanwhile)
+static const char	*gameSettingEditedCvar;		// its own
+static itemDef_t	*gameSettingRefused;		// the row whose description says why a number was refused, until
+static int			gameSettingRefusedUntil;
+static const char	*gameSettingRefusedDesc;	// its own description
+static char			gameSettingRefusal[256];
+
+// all of them forgotten, as the menus are read again (Menu_Reset)
+static void GameSettings_Forget( void )
+{
+	gameSettingEdited = gameSettingRefused = NULL;
+	gameSettingEditedCvar = gameSettingRefusedDesc = NULL;
+}
+
+static qboolean GameSettings_IsRow( const itemDef_t *item )
+{
+	return ( item && item->cvar && item->window.group && !Q_stricmp( item->window.group, GAME_SETTINGS_GROUP ) ) ? qtrue : qfalse;
+}
+
+static const gameSetting_t *GameSettings_Find( const char *cvar )
+{
+	for ( size_t i = 0; cvar && i < ARRAY_LEN( gameSettings ); i++ )
+	{
+		if ( gameSettings[i].cvar && !Q_stricmp( gameSettings[i].cvar, cvar ) )
+			return &gameSettings[i];
+	}
+	return NULL;
+}
+
+static qboolean GameSettings_Available( const gameSetting_t &setting )
+{
+	if ( !setting.avail )
+		return qtrue;
+	if ( !Q_stricmp( setting.avail, "vulkan" ) )
+		return ( cls.glconfig.vendor_string && !Q_stricmp( cls.glconfig.vendor_string, "Vulkan" ) ) ? qtrue : qfalse;
+	return DC->getCVarValue( setting.avail ) ? qtrue : qfalse;
+}
+
+// A row of choices whose setting has a value none of them is (set from the console): the value itself
+static const char *GameSettings_OtherValue( itemDef_t *item, const char *text, char *buffer, int size )
+{
+	if ( GameSettings_IsRow( item ) && text && !Q_stricmp( text, "@MENUS_CUSTOM" ) )
+	{
+		DC->getCVarString( item->cvar, buffer, size );
+		return buffer;
+	}
+	return text;
+}
+
+static void GameSettings_Play( const char *sound )
+{
+	DC->startLocalSound( DC->registerSound( sound, qfalse ), CHAN_AUTO );
+}
+
+// The description of a row back from saying why a number was refused
+static void GameSettings_RestoreDescription( void )
+{
+	if ( gameSettingRefused )
+	{
+		gameSettingRefused->descText = gameSettingRefusedDesc;
+	}
+	gameSettingRefused = NULL;
+	gameSettingRefusedDesc = NULL;
+}
+
+// Every frame a menu is drawn
+static void GameSettings_Frame( void )
+{
+	if ( gameSettingRefused && DC->realTime >= gameSettingRefusedUntil )
+	{
+		GameSettings_RestoreDescription();
+	}
+}
+
+// Enter or a click on the row of a number (the menu has begun its typing): the typing starts from the setting's value,
+// in GAME_SETTINGS_ENTRY, so that the setting itself only changes when the number is accepted (GameSettings_EndEdit)
+static void GameSettings_BeginEdit( itemDef_t *item )
+{
+	if ( !GameSettings_IsRow( item ) || item->type != ITEM_TYPE_EDITFIELD || !item->typeData || gameSettingEdited )
+	{
+		return;
+	}
+	char value[MAX_EDITFIELD];
+	DC->getCVarString( item->cvar, value, sizeof( value ) );
+	DC->setCVar( GAME_SETTINGS_ENTRY, value );
+	gameSettingEdited = item;
+	gameSettingEditedCvar = item->cvar;
+	item->cvar = GAME_SETTINGS_ENTRY;
+	item->cursorPos = strlen( value );
+	((editFieldDef_t *)item->typeData)->paintOffset = 0;
+}
+
+// The end of the typing. accept: the setting is set to the number typed if it is one, in its range; otherwise it keeps
+// its value, and the row's description says why for a few seconds
+static void GameSettings_EndEdit( qboolean accept )
+{
+	itemDef_t *item = gameSettingEdited;
+	g_editingField = qfalse;
+	g_editItem = NULL;
+	if ( !item )
+	{
+		return;
+	}
+	char typed[MAX_EDITFIELD];
+	DC->getCVarString( GAME_SETTINGS_ENTRY, typed, sizeof( typed ) );
+	item->cvar = gameSettingEditedCvar;
+	item->cursorPos = 0;
+	gameSettingEdited = NULL;
+	gameSettingEditedCvar = NULL;
+
+	const gameSetting_t *setting = GameSettings_Find( item->cvar );
+	char current[MAX_EDITFIELD];
+	DC->getCVarString( item->cvar, current, sizeof( current ) );
+	char *number = typed;
+	while ( *number == ' ' )
+		number++;
+	for ( char *end = number + strlen( number ); end > number && end[-1] == ' '; )
+		*--end = '\0';
+	if ( !accept || !setting || !number[0] || !strcmp( number, current ) )
+	{
+		return;
+	}
+
+	char *end;
+	const double value = strtod( number, &end );
+	if ( end != number && !*end && value >= setting->min && value <= setting->max && ( !setting->whole || value == floor( value ) ) )
+	{
+		DC->setCVar( item->cvar, setting->whole ? va( "%d", (int)value ) : va( "%g", value ) );
+		if ( gameSettingRefused == item )
+		{
+			GameSettings_RestoreDescription();
+		}
+		GameSettings_Play( "sound/interface/button1.wav" );
+		return;
+	}
+
+	// refused
+	if ( gameSettingRefused != item )
+	{
+		GameSettings_RestoreDescription();
+		gameSettingRefused = item;
+		gameSettingRefusedDesc = item->descText;
+	}
+	Com_sprintf( gameSettingRefusal, sizeof( gameSettingRefusal ), "Not a valid value: \"%s\". Type a %s from %g to %g (%s).",
+		number, setting->whole ? "whole number" : "number", setting->min, setting->max, setting->cvar );
+	item->descText = gameSettingRefusal;
+	gameSettingRefusedUntil = DC->realTime + 5000;
+	GameSettings_Play( "sound/interface/menuroam.wav" );
+}
+
+// A key while a number is typed into a row (Menu_HandleKey). Returns qtrue if it took the key; otherwise the key has
+// ended the typing, accepting the number, and goes on to the menu as usual (a click, a key moving the focus).
+static qboolean GameSettings_EditKey( int key )
+{
+	switch ( key )
+	{
+	case A_ENTER:
+	case A_KP_ENTER:
+		GameSettings_EndEdit( qtrue );
+		return qtrue;
+	case A_ESCAPE:
+		GameSettings_EndEdit( qfalse );
+		return qtrue;
+	case A_MOUSE1:
+	case A_MOUSE2:
+	case A_MOUSE3:
+	case A_TAB:
+	case A_CURSOR_UP:
+	case A_CURSOR_DOWN:
+	case A_KP_8:
+	case A_KP_2:
+		GameSettings_EndEdit( qtrue );
+		return qfalse;
+	case A_MWHEELUP:
+	case A_MWHEELDOWN:
+		return qtrue;	// (no scrolling away from the row being typed into)
+	default:
+		break;
+	}
+	if ( key & K_CHAR_FLAG )
+	{
+		const int c = key & ~K_CHAR_FLAG;
+		if ( c != 'h' - 'a' + 1 && !( c >= '0' && c <= '9' ) && c != '.' && c != '-' && c != '+' )
+		{
+			return qtrue;	// (only what numbers are written with; ctrl-h is backspace)
+		}
+	}
+	Item_TextField_HandleKey( gameSettingEdited, key );
+	return qtrue;
+}
+
+// A menu script as its words, the way PC_Script_Parse keeps one (words of more than one letter in quotes)
+#define SCRIPT_MAX_WORDS	256
+
+typedef struct {
+	int		count;
+	char	word[SCRIPT_MAX_WORDS][MAX_QPATH];
+} scriptWords_t;
+
+static void Script_Split( const char *script, scriptWords_t &words )
+{
+	const char *p = script;
+	words.count = 0;
+	COM_BeginParseSession();
+	while ( p && words.count < SCRIPT_MAX_WORDS )
+	{
+		const char *word = COM_ParseExt( &p, qtrue );
+		if ( !word || !word[0] )
+			break;
+		Q_strncpyz( words.word[words.count++], word, sizeof( words.word[0] ) );
+	}
+	COM_EndParseSession();
+}
+
+static void Script_AddWord( scriptWords_t &words, const char *word )
+{
+	if ( words.count < SCRIPT_MAX_WORDS )
+		Q_strncpyz( words.word[words.count++], word, sizeof( words.word[0] ) );
+}
+
+static const char *Script_Join( const scriptWords_t &words )
+{
+	char script[4096];
+	script[0] = '\0';
+	for ( int i = 0; i < words.count; i++ )
+	{
+		Q_strcat( script, sizeof( script ), va( words.word[i][1] ? "\"%s\" " : "%s ", words.word[i] ) );
+	}
+	return String_Alloc( script );
+}
+
+// whether the script has the command with this first word (show or hide an item or group, ...)
+static qboolean Script_Has( const scriptWords_t &words, const char *command, const char *name )
+{
+	for ( int i = 0; i + 1 < words.count; i++ )
+	{
+		if ( !Q_stricmp( words.word[i], command ) && !Q_stricmp( words.word[i + 1], name ) )
+			return qtrue;
+	}
+	return qfalse;
+}
+
+// A copy of an item of the menu, added to it (as one of another type, if type differs)
+static itemDef_t *Menu_AddCopyOfItem( menuDef_t *menu, const itemDef_t *from, const char *name, int type )
+{
+	if ( menu->itemCount >= MAX_MENUITEMS )
+	{
+		return NULL;
+	}
+	itemDef_t *item = (itemDef_t *)UI_Alloc( sizeof( itemDef_t ) );
+	if ( !item )
+	{
+		return NULL;
+	}
+	memcpy( item, from, sizeof( itemDef_t ) );
+	item->type = type;
+	item->typeData = NULL;
+	Item_ValidateTypeData( item );
+	if ( type == from->type && type == ITEM_TYPE_MULTI && from->typeData && item->typeData )
+	{
+		memcpy( item->typeData, from->typeData, sizeof( multiDef_t ) );
+	}
+	item->window.name = (char *)String_Alloc( name );
+	item->window.flags &= ~( WINDOW_HASFOCUS | WINDOW_MOUSEOVER );
+	item->parent = menu;
+	menu->items[menu->itemCount++] = item;
+	return item;
+}
+
+// The Defaults button's mouseEnter or mouseExit, for the button shift below it: the highlight it moves (setitemrect)
+// moved there too, or a highlight of its own (one at its place) copied there
+static const char *GameSettings_ButtonScript( menuDef_t *menu, const itemDef_t *defaults, const char *script, float shift, itemDef_t **glow )
+{
+	static scriptWords_t words;
+	if ( !script )
+	{
+		return NULL;
+	}
+	Script_Split( script, words );
+	for ( int i = 0; i + 1 < words.count; i++ )
+	{
+		if ( !Q_stricmp( words.word[i], "setitemrect" ) && i + 5 < words.count )
+		{
+			Q_strncpyz( words.word[i + 3], va( "%g", atof( words.word[i + 3] ) + shift ), sizeof( words.word[0] ) );
+			continue;
+		}
+		if ( ( Q_stricmp( words.word[i], "show" ) && Q_stricmp( words.word[i], "hide" ) ) || Script_Has( words, "setitemrect", words.word[i + 1] ) )
+		{
+			continue;
+		}
+		const itemDef_t *own = Menu_FindItemByName( menu, words.word[i + 1] );
+		if ( !own || fabsf( own->window.rectClient.y - defaults->window.rectClient.y ) > 4.0f )
+		{
+			continue;
+		}
+		if ( !*glow && ( *glow = Menu_AddCopyOfItem( menu, own, "gamesettingsbutton_glow", own->type ) ) != NULL )
+		{
+			(*glow)->window.rectClient.y += shift;
+		}
+		if ( *glow )
+		{
+			Q_strncpyz( words.word[i + 1], (*glow)->window.name, sizeof( words.word[0] ) );
+		}
+	}
+	return Script_Join( words );
+}
+
+static const char *GameSettings_Description( const gameSetting_t &setting )
+{
+	if ( setting.choices )
+	{
+		return String_Alloc( va( "%s (%s)", setting.desc, setting.cvar ) );
+	}
+	return String_Alloc( va( "%s (%g to %g, %s)", setting.desc, setting.min, setting.max, setting.cvar ) );
+}
+
+/*
+===============
+Menu_AddGameSettingsPage
+
+The Game Settings page (see above), when the menu is one of the Setup menus of either game. Called when the menu has
+been read.
+===============
+*/
+static void Menu_AddGameSettingsPage( menuDef_t *menu )
+{
+	itemDef_t *video1 = Menu_FindItemByName( menu, "video1menubutton" );
+	itemDef_t *video2 = Menu_FindItemByName( menu, "video2menubutton" );
+	itemDef_t *defaults = Menu_FindItemByName( menu, "gamedefaultsmenubutton" );
+	itemDef_t *panel = Menu_FindItemByName( menu, "setup_background" );
+	itemDef_t *model = NULL;	// the row the rows are copies of: the first of the Game Options page, an Off and On row
+	for ( int i = 0; i < menu->itemCount && !model; i++ )
+	{
+		itemDef_t *item = menu->items[i];
+		if ( item->type == ITEM_TYPE_MULTI && item->typeData && ((multiDef_t *)item->typeData)->count >= 2 && item->cvar &&
+			 !Q_stricmp( item->cvar, "cg_drawcrosshair" ) && item->window.group && !Q_stricmp( item->window.group, "options" ) )
+			model = item;
+	}
+	if ( !video1 || !video2 || !defaults || !panel || !model || !video1->action || !defaults->action ||
+		 Menu_FindItemByName( menu, GAME_SETTINGS_BUTTON ) )
+	{
+		return;
+	}
+	if ( menu->itemCount + (int)ARRAY_LEN( gameSettings ) + 5 > MAX_MENUITEMS )
+	{
+		Com_Printf( S_COLOR_YELLOW "%s: no room for the Game Settings page\n", menu->window.name );
+		return;
+	}
+	const qboolean outcast = UI_OutcastStyle();
+
+	// The Defaults button's page: the groups it shows that the Video button doesn't (both show the panel)
+	static scriptWords_t words, otherWords;
+	const char *defaultsPage[4];
+	int numDefaultsPage = 0;
+	Script_Split( video1->action, otherWords );
+	Script_Split( defaults->action, words );
+	for ( int i = 0; i + 1 < words.count; i++ )
+	{
+		if ( !Q_stricmp( words.word[i], "show" ) && !Script_Has( otherWords, "show", words.word[i + 1] ) && numDefaultsPage < 4 )
+			defaultsPage[numDefaultsPage++] = String_Alloc( words.word[i + 1] );
+	}
+	if ( !numDefaultsPage )
+	{
+		return;
+	}
+	// the colours of the page buttons, the one of the page shown and the others, as the Defaults button sets them
+	vec4_t selected = { 1, 1, 1, 1 }, unselected;
+	memcpy( unselected, defaults->window.foreColor, sizeof( vec4_t ) );
+	for ( int i = 0; i + 6 < words.count; i++ )
+	{
+		if ( Q_stricmp( words.word[i], "setitemcolor" ) || Q_stricmp( words.word[i + 2], "forecolor" ) )
+			continue;
+		float *color = !Q_stricmp( words.word[i + 1], defaults->window.name ) ? selected : !Q_stricmp( words.word[i + 1], video1->window.name ) ? unselected : NULL;
+		for ( int c = 0; color && c < 4; c++ )
+			color[c] = atof( words.word[i + 3 + c] );
+	}
+
+	// The button, below the last of the page buttons (Jedi Outcast's in-game Setup has no Mods button)
+	const float buttonPitch = video2->window.rectClient.y - video1->window.rectClient.y;
+	float lastY = defaults->window.rectClient.y;
+	for ( int i = 0; i < menu->itemCount; i++ )
+	{
+		const itemDef_t *item = menu->items[i];
+		const int len = item->window.name ? strlen( item->window.name ) : 0;
+		if ( item->type == ITEM_TYPE_BUTTON && len > 10 && !Q_stricmp( item->window.name + len - 10, "menubutton" ) &&
+			 fabsf( item->window.rectClient.x - video1->window.rectClient.x ) < 1.0f )
+			lastY = Q_max( lastY, item->window.rectClient.y );
+	}
+	const float shift = lastY + buttonPitch - defaults->window.rectClient.y;
+	itemDef_t *button = Menu_AddCopyOfItem( menu, defaults, GAME_SETTINGS_BUTTON, ITEM_TYPE_BUTTON );
+	if ( !button )
+	{
+		return;
+	}
+	button->window.rectClient.y += shift;
+	const char *defaultsText = ( defaults->text && defaults->text[0] == '@' ) ? SE_GetString( defaults->text + 1 ) : defaults->text;
+	qboolean lowerCase = qfalse;
+	for ( const char *c = defaultsText; c && *c; c++ )
+		lowerCase = ( lowerCase || ( *c >= 'a' && *c <= 'z' ) ) ? qtrue : qfalse;
+	button->text = (char *)String_Alloc( lowerCase ? "Game Settings" : "GAME SETTINGS" );
+	button->descText = String_Alloc( "Movement, lightsaber, ragdoll and graphics settings of this version. They apply at once." );
+	itemDef_t *buttonGlow = NULL;
+	button->mouseEnter = GameSettings_ButtonScript( menu, defaults, defaults->mouseEnter, shift, &buttonGlow );
+	button->mouseExit = GameSettings_ButtonScript( menu, defaults, defaults->mouseExit, shift, &buttonGlow );
+	// its action: the Defaults button's, showing this page instead of that one
+	for ( int i = 0; i + 1 < words.count; i++ )
+	{
+		for ( int g = 0; g < numDefaultsPage; g++ )
+		{
+			if ( !Q_stricmp( words.word[i], "show" ) && !Q_stricmp( words.word[i + 1], defaultsPage[g] ) )
+				Q_strncpyz( words.word[i], "hide", sizeof( words.word[0] ) );
+		}
+		if ( !Q_stricmp( words.word[i], "setitemcolor" ) && i + 6 < words.count && !Q_stricmp( words.word[i + 1], defaults->window.name ) )
+		{
+			for ( int c = 0; c < 4; c++ )
+				Q_strncpyz( words.word[i + 3 + c], va( "%g", unselected[c] ), sizeof( words.word[0] ) );
+		}
+	}
+	Script_AddWord( words, "show" );
+	Script_AddWord( words, GAME_SETTINGS_GROUP );
+	Script_AddWord( words, ";" );
+	Script_AddWord( words, "setitemcolor" );
+	Script_AddWord( words, GAME_SETTINGS_BUTTON );
+	Script_AddWord( words, "forecolor" );
+	for ( int c = 0; c < 4; c++ )
+		Script_AddWord( words, va( "%g", selected[c] ) );
+	Script_AddWord( words, ";" );
+	button->action = Script_Join( words );
+
+	// The other page buttons, and the menu as it opens, hide the page (the ones that show or hide the Defaults page)
+	const char *hidePage = String_Alloc( va( "\"hide\" \"%s\" ; \"setitemcolor\" \"%s\" \"forecolor\" \"%g\" \"%g\" \"%g\" \"%g\" ; ",
+		GAME_SETTINGS_GROUP, GAME_SETTINGS_BUTTON, unselected[0], unselected[1], unselected[2], unselected[3] ) );
+	for ( int i = -1; i < menu->itemCount; i++ )
+	{
+		const char **script = ( i < 0 ) ? &menu->onOpen : &menu->items[i]->action;
+		if ( !*script || ( i >= 0 && menu->items[i] == button ) )
+			continue;
+		Script_Split( *script, otherWords );
+		qboolean pageScript = qfalse;
+		for ( int g = 0; g < numDefaultsPage; g++ )
+			pageScript = ( pageScript || Script_Has( otherWords, "show", defaultsPage[g] ) || Script_Has( otherWords, "hide", defaultsPage[g] ) ) ? qtrue : qfalse;
+		if ( pageScript )
+			*script = String_Alloc( va( "%s%s", *script, hidePage ) );
+	}
+
+	// The page: the rows where the Game Options page has its rows, from its first row's place down to the
+	// description (Jedi Outcast's closer together than on its other pages, as on More Video), its highlight bar a copy
+	// of the one of that row, put where the row under the mouse is, headings in the colour of the menu's title (or of
+	// the page buttons, where that is the rows' colour)
+	const float x = model->window.rectClient.x, w = model->window.rectClient.w, firstY = model->window.rectClient.y;
+	const float pitch = outcast ? 16.0f : model->window.rectClient.h;
+	const float bottom = Q_min( panel->window.rectClient.y + panel->window.rectClient.h, (float)menu->descY - 4.0f );
+	vec4_t headingColor;
+	const itemDef_t *title = Menu_FindItemByName( menu, "setup_title" );
+	memcpy( headingColor, ( title && memcmp( title->window.foreColor, model->window.foreColor, sizeof( vec4_t ) ) ) ? title->window.foreColor : unselected, sizeof( vec4_t ) );
+
+	itemDef_t *anchor = Menu_AddCopyOfItem( menu, model, "gamesettings_page", ITEM_TYPE_TEXT );	// (shown with the page: RowScroll_Shown)
+	if ( !anchor )
+	{
+		return;
+	}
+	anchor->window.group = (char *)String_Alloc( GAME_SETTINGS_GROUP );
+	anchor->window.flags |= WINDOW_DECORATION;
+	anchor->window.rectClient.w = anchor->window.rectClient.h = 0.0f;
+	anchor->text = NULL;
+	anchor->cvar = anchor->cvarTest = anchor->enableCvar = NULL;
+	anchor->descText = anchor->action = anchor->mouseEnter = anchor->mouseExit = NULL;
+
+	itemDef_t *bar = NULL;
+	float barDY = 0.0f;
+	Script_Split( model->mouseEnter, otherWords );
+	for ( int i = 0; i + 1 < otherWords.count && !bar; i++ )
+	{
+		const itemDef_t *modelBar = !Q_stricmp( otherWords.word[i], "show" ) ? Menu_FindItemByName( menu, otherWords.word[i + 1] ) : NULL;
+		if ( modelBar && ( bar = Menu_AddCopyOfItem( menu, modelBar, GAME_SETTINGS_BAR, modelBar->type ) ) != NULL )
+		{
+			barDY = modelBar->window.rectClient.y - model->window.rectClient.y;
+			bar->window.rectClient.h = Q_min( modelBar->window.rectClient.h, pitch + 2.0f );
+			bar->window.flags &= ~WINDOW_VISIBLE;
+		}
+	}
+
+	rowScroll_t *rs = RowScroll_Slot( menu, ROW_SCROLL_GAME_SETTINGS );
+	static rowScroll_t unused;			// (more menus with the page than slots: theirs don't scroll)
+	rowScroll_t &rowScroll = rs ? *rs : unused;
+	memset( &rowScroll, 0, sizeof( rowScroll ) );
+	const multiDef_t *offOn = (const multiDef_t *)model->typeData;
+	for ( size_t k = 0; k < ARRAY_LEN( gameSettings ) && rowScroll.numRows < ROW_SCROLL_MAX_ROWS; k++ )
+	{
+		const gameSetting_t &setting = gameSettings[k];
+		itemDef_t *row;
+		if ( !setting.cvar )
+		{// a heading, if a row follows it
+			size_t next = k + 1;
+			while ( next < ARRAY_LEN( gameSettings ) && gameSettings[next].cvar && !GameSettings_Available( gameSettings[next] ) )
+				next++;
+			if ( next >= ARRAY_LEN( gameSettings ) || !gameSettings[next].cvar )
+				continue;
+			char heading[64];
+			Q_strncpyz( heading, setting.label, sizeof( heading ) );
+			Q_strupr( heading );
+			if ( !( row = Menu_AddCopyOfItem( menu, model, va( "gamesettings_%s", setting.label ), ITEM_TYPE_TEXT ) ) )
+				break;
+			row->text = (char *)String_Alloc( heading );
+			row->cvar = NULL;
+			row->descText = row->action = row->mouseEnter = row->mouseExit = NULL;
+			row->window.flags |= WINDOW_DECORATION;
+			row->textalignment = ITEM_ALIGN_CENTER;
+			row->textalignx = w * 0.5f;
+			memcpy( row->window.foreColor, headingColor, sizeof( vec4_t ) );
+		}
+		else
+		{
+			if ( !GameSettings_Available( setting ) )
+				continue;
+			if ( (unsigned)Cvar_Flags( setting.cvar ) == (unsigned)CVAR_NONEXISTENT )
+				Cvar_Get( setting.cvar, setting.defaultValue, setting.flags );	// (as the game will make it: shown as it is then)
+			if ( !( row = Menu_AddCopyOfItem( menu, model, va( "gamesetting_%s", setting.cvar ), setting.choices ? ITEM_TYPE_MULTI : ITEM_TYPE_EDITFIELD ) ) )
+				break;
+			row->cvar = String_Alloc( setting.cvar );
+			row->text = (char *)String_Alloc( setting.label );
+			row->descText = GameSettings_Description( setting );
+			row->mouseExit = bar ? String_Alloc( va( "\"hide\" \"%s\" ", GAME_SETTINGS_BAR ) ) : NULL;
+			if ( setting.choices )
+			{
+				multiDef_t *multiPtr = (multiDef_t *)row->typeData;
+				char choices[256];
+				Q_strncpyz( choices, setting.choices, sizeof( choices ) );
+				memset( multiPtr, 0, sizeof( *multiPtr ) );
+				for ( char *name = choices, *next; name && multiPtr->count < MAX_MULTI_CVARS; name = next )
+				{
+					if ( ( next = strchr( name, '|' ) ) != NULL )
+						*next++ = '\0';
+					multiPtr->cvarList[multiPtr->count] = !Q_stricmp( name, "Off" ) ? offOn->cvarList[0] : !Q_stricmp( name, "On" ) ? offOn->cvarList[1] : String_Alloc( name );
+					multiPtr->cvarValue[multiPtr->count] = (float)multiPtr->count;
+					multiPtr->count++;
+				}
+			}
+			else
+			{
+				editFieldDef_t *editPtr = (editFieldDef_t *)row->typeData;
+				editPtr->maxChars = editPtr->maxPaintChars = 12;
+				row->action = NULL;
+			}
+		}
+		row->window.group = (char *)String_Alloc( GAME_SETTINGS_GROUP );
+		row->cvarTest = row->enableCvar = NULL;
+		row->cvarFlags = 0;
+		row->window.rectClient.x = x;
+		row->window.rectClient.y = firstY;
+		row->window.rectClient.w = w;
+		row->window.rectClient.h = pitch;
+		rowScroll.rows[rowScroll.numRows++] = row;
+	}
+	rowScroll.visible = Q_min( rowScroll.numRows, Q_min( ROW_SCROLL_MAX_SHOWN, Q_max( 4, (int)( ( bottom - firstY ) / pitch ) ) ) );
+	for ( int at = 0; bar && at < rowScroll.visible; at++ )
+	{
+		rowScroll.enter[at] = String_Alloc( va( "\"show\" \"%s\" \"setitemrect\" \"%s\" \"%.0f\" \"%.0f\" \"%.0f\" \"%.0f\" ", GAME_SETTINGS_BAR, GAME_SETTINGS_BAR,
+			bar->window.rectClient.x, firstY + at * pitch + barDY, bar->window.rectClient.w, bar->window.rectClient.h ) );
+	}
+	rowScroll.left = x;
+	rowScroll.firstY = firstY;
+	rowScroll.pitch = pitch;
+	rowScroll.barX = outcast ? x + w + 2 : x + w - ROW_SCROLL_BAR - 4;	// (as More Video's)
+	rowScroll.wheelOnValues = true;
+	RowScroll_Place( rowScroll );
+	for ( int i = 0; i < rowScroll.numRows; i++ )
+	{
+		rowScroll.rows[i]->window.flags &= ~WINDOW_VISIBLE;	// (shown with the page)
+	}
+	if ( rs )
+	{
+		rowScroll.menu = menu;
+		rowScroll.page = ROW_SCROLL_GAME_SETTINGS;
+		rowScroll.anchor = anchor;
+	}
+	Com_Printf( "%s: added the Game Settings page, %d rows (%d shown at once)\n", menu->window.name, rowScroll.numRows, rowScroll.visible );
+}
 #endif
 
 /*
@@ -6426,6 +7217,7 @@ void Menu_PostParse(menuDef_t *menu)
 	}
 #ifndef JK2_MODE
 	Menu_AddInterfaceRow( menu );
+	Menu_AddGameSettingsPage( menu );
 #endif
 
 	if (menu->fullScreen)
@@ -6885,7 +7677,10 @@ void Menu_Paint(menuDef_t *menu, qboolean forcePaint)
 	// paint the background and or border
 	Window_Paint(&menu->window, menu->fadeAmount, menu->fadeClamp, menu->fadeCycle );
 
-	RowScroll_Sync( menu );	// (the rows of the More Video page)
+	RowScroll_Sync( menu );	// (the scrolled rows of a Setup page)
+#ifndef JK2_MODE
+	GameSettings_Frame();
+#endif
 
 	// Loop through all items for the menu and paint them
 	int iSlotsVisible = 0;
@@ -8331,6 +9126,10 @@ void Item_Multi_Paint(itemDef_t *item)
 	const char *text = "";
 
 	text = Item_Multi_Setting(item);
+#ifndef JK2_MODE
+	char otherValue[64];
+	text = GameSettings_OtherValue( item, text, otherValue, sizeof( otherValue ) );	// (a value of a Game Settings row without a name)
+#endif
 	if (*text == '@')	// string reference
 	{
 		text = SE_GetString( &text[1] );
@@ -10164,7 +10963,7 @@ void Menu_HandleMouseMove(menuDef_t *menu, float x, float y)
 		return;
 	}
 
-	if ( RowScroll_MouseMove( menu, y ) )	// (the thumb of the More Video page's scroll bar dragged)
+	if ( RowScroll_MouseMove( menu, y ) )	// (the thumb of a Setup page's scroll bar dragged)
 	{
 		return;
 	}
@@ -12034,6 +12833,21 @@ void Menu_HandleKey(menuDef_t *menu, int key, qboolean down)
 		return;
 	}
 
+#ifndef JK2_MODE
+	if ( g_editingField && down && gameSettingEdited && g_editItem == gameSettingEdited )
+	{// a number typed into a row of the Game Settings page
+		if ( GameSettings_EditKey( key ) )
+		{
+			inHandler = qfalse;
+			return;
+		}
+		if ( key == A_MOUSE1 || key == A_MOUSE2 || key == A_MOUSE3 )
+		{
+			Display_MouseMove( NULL, DC->cursorx, DC->cursory );
+		}
+	}
+	else
+#endif
 	if (g_editingField && down)
 	{
 		if (!Item_TextField_HandleKey(g_editItem, key))
@@ -12061,7 +12875,7 @@ void Menu_HandleKey(menuDef_t *menu, int key, qboolean down)
 		return;
 	}
 
-	if ( RowScroll_HandleKey( menu, key, down ) )	// (the scroll bar of the More Video page)
+	if ( RowScroll_HandleKey( menu, key, down ) )	// (the scroll bar of a Setup page)
 	{
 		inHandler = qfalse;
 		return;
@@ -12217,6 +13031,9 @@ void Menu_HandleKey(menuDef_t *menu, int key, qboolean down)
 						item->cursorPos = 0;
 						g_editingField = qtrue;
 						g_editItem = item;
+#ifndef JK2_MODE
+						GameSettings_BeginEdit( item );
+#endif
 						//DC->setOverstrikeMode(qtrue);
 					}
 				}
@@ -12296,6 +13113,9 @@ void Menu_HandleKey(menuDef_t *menu, int key, qboolean down)
 					item->cursorPos = 0;
 					g_editingField = qtrue;
 					g_editItem = item;
+#ifndef JK2_MODE
+					GameSettings_BeginEdit( item );
+#endif
 					//DC->setOverstrikeMode(qtrue);
 				}
 				else

@@ -254,7 +254,7 @@ void UI_InitMemory( void );
 
 
 #define MAX_COLOR_RANGES	10
-#define MAX_MENUITEMS		150
+#define MAX_MENUITEMS		256		// (Setup has a page of rows added, Menu_AddGameSettingsPage)
 #define MAX_MENUS			64
 
 

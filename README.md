@@ -28,6 +28,8 @@ Please direct support queries, discussions and feature requests to the JKHub sub
 
 This fork (single player) adds the console variables below. Type them in the console (`~`) as `name value`, or put them in your config. Unless noted, they are saved in your config and take effect immediately. "Latched" ones take effect after `vid_restart`.
 
+The ones that take effect immediately are also in the menus, in Setup → Game Settings (in both games' menus); `ui_style` is Setup → Options → Interface instead. The page lists them by group with their current values, also ones changed in the console. With the mouse over a row, the bottom of the screen says what the setting does and gives its name. Settings with a few values change with a click, Enter or the mouse wheel over the value. Numbers are typed in and set with Enter, if they are within the setting's range; otherwise the setting keeps its value. Escape leaves it as it was. Changes apply at once. Not on the page: the settings the game or the launcher sets, the ones that wait for a restart, and the upstream ones under Changed defaults.
+
 ### Launcher
 
 The single player program opens a chooser to pick which game to play. It reads both games' install folders from `campaigns.ini`, next to the program. To skip the chooser, pass one of these on the command line:
@@ -104,10 +106,10 @@ Rows for most of these are in Setup → More Video, and appear only when your re
 | `r_lampLighting` | `1` | Characters lit by the level's own lamps, each from its side. `0` off, `1` with ray tracing, `2` always. |
 | `r_softParticles` | `1` | Smoke, sparks and glows fade where they meet walls and floors instead of ending in a hard line (Vulkan renderer). |
 | `r_smoothLightmaps` | `1` | Level lighting is smoothed with a bicubic filter as the level loads. Latched. |
-| `r_alphaToCoverage` | `1` | Smooths the edges of see-through textures (leaves, fences) when anti-aliasing is on. |
+| `r_alphaToCoverage` | `1` | Smooths the edges of see-through textures (leaves, fences) when anti-aliasing is on. Takes effect after `vid_restart`. |
 | `r_sampleShading` | `0` | `0` = off. Up to `1` = shade every anti-aliasing sample. Smoother, but slow. Latched. |
 | `r_surfaceSpriteRange` | `3` | Multiplies how far away grass, bushes and the like are still drawn. |
-| `r_wideUI` | `1` | On wide screens, menus and the HUD keep their shape instead of being stretched. |
+| `r_wideUI` | `1` | On wide screens, menus and the HUD keep their shape instead of being stretched. Latched. |
 
 Shadows. Setup's shadow row also offers Soft shadows (`cg_shadows 4`) where the renderer can draw them.
 
@@ -138,7 +140,7 @@ The Vulkan renderer is the default (`cl_renderer rdsp-vulkan`). Set `cl_renderer
 
 | Setting | Default | What it does |
 | - | - | - |
-| `com_jobThreads` | `-1` | Worker threads for loading and other parallel work. `-1` = use what the processor has. `0` = no extra threads. |
+| `com_jobThreads` | `-1` | Worker threads for loading and other parallel work. `-1` = use what the processor has. `0` = no extra threads. Takes effect after `vid_restart`. |
 
 ### Debugging
 
@@ -159,7 +161,7 @@ These report state and are not meant to be changed:
 - `cg_missionstatusscreen`: `1` when the next loading screen is to show the statistics of the level just finished (Jedi Outcast's level changes ask for it; its menus show them over the level's picture, Jedi Academy's in the mission briefing's box).
 - `cl_rendererFailure`: why the Vulkan renderer couldn't start, if it couldn't.
 - `com_configVersion`: how far an old config has been brought up to date.
-- `com_levelLoading`, `r_outcastAnimationsStart`: internal.
+- `com_levelLoading`, `r_outcastAnimationsStart`, `ui_gameSettingEntry` (the number being typed on the Game Settings page): internal.
 - `ui_r_resolution`, `ui_r_ext_multisample`: the Video page's choices of resolution and anti-aliasing, applied with Apply.
 
 ### Changed defaults
