@@ -1629,6 +1629,29 @@ static qboolean RowScroll_MouseMove( menuDef_t *menu, float y )
 
 /*
 ================
+RowScroll_Bottom
+
+How far down the scrolled rows of a Setup page, and the panel they are on, can reach: above the description of what
+is under the mouse (descY), and above the buttons at the bottom of the menu (Back, Exit, Resume) under the panel that
+are in line with the rows, left to right
+================
+*/
+static float RowScroll_Bottom( const menuDef_t *menu, const itemDef_t *panel, float firstY, float left, float right )
+{
+	float bottom = ( menu->descY > 0 ) ? (float)menu->descY : (float)SCREEN_HEIGHT;
+	const float below = panel ? Q_max( firstY, panel->window.rectClient.y + panel->window.rectClient.h ) : firstY;
+	for ( int i = 0; i < menu->itemCount; i++ )
+	{
+		const itemDef_t *item = menu->items[i];
+		const rectDef_t &r = item->window.rectClient;
+		if ( item->type == ITEM_TYPE_BUTTON && ( item->window.flags & WINDOW_VISIBLE ) && r.y >= below && r.x < right && r.x + r.w > left )
+			bottom = Q_min( bottom, r.y );
+	}
+	return bottom - 4.0f;
+}
+
+/*
+================
 Menu_AddEffectRows
 
 The "More Video" page of Setup has room for one more row. Make room for one row for each of the screen effects and
@@ -1762,8 +1785,12 @@ static void Menu_AddEffectRows( menuDef_t *menu, itemDef_t *driverButton )
 	if ( brightnessY > 0 )
 		brightness->window.rectClient.y = brightnessY;
 
-	// as many rows as fit above the driver info, at the bottom of the screen; with more, a scroll bar (RowScroll_*)
-	const int visible = Q_min( numRows, Q_max( 4, (int)( ( SCREEN_HEIGHT - 4 - ( barHeight + 2 ) - 2 - firstY ) / pitch ) ) );
+	// as many rows as fit above the driver info, which ends (with the panel, where it grows) above the description and
+	// the buttons at the bottom of the menu; with more, a scroll bar (RowScroll_*)
+	itemDef_t *panel = Menu_FindItemByName( menu, "setup_background" );
+	const float bottom = RowScroll_Bottom( menu, panel, firstY, x, x + w );
+	const float belowDriver = barHeight + ( panelGrows ? 4 : 2 );	// (its highlight bar, or the panel's edge under it)
+	const int visible = Q_min( numRows, Q_max( 4, (int)( ( bottom - belowDriver - 2 - firstY ) / pitch ) ) );
 	rowScroll_t *rs = RowScroll_Slot( menu, ROW_SCROLL_MORE_VIDEO );
 	static rowScroll_t unused;			// (more menus with the page than slots: those don't scroll)
 	rowScroll_t &rowScroll = rs ? *rs : unused;
@@ -1794,15 +1821,9 @@ static void Menu_AddEffectRows( menuDef_t *menu, itemDef_t *driverButton )
 
 	const float driverY = firstY + visible * pitch + 2;
 	driverButton->window.rectClient.y = driverY;
-	if ( panelGrows )
+	if ( panelGrows && panel && panel->window.rectClient.y + panel->window.rectClient.h < driverY + barHeight + 4 )
 	{
-		for ( int i = 0; i < menu->itemCount; i++ )
-		{
-			itemDef_t *panel = menu->items[i];
-			if ( panel->window.name && !Q_stricmp( panel->window.name, "setup_background" ) &&
-				 panel->window.rectClient.y + panel->window.rectClient.h < driverY + barHeight + 4 )
-				panel->window.rectClient.h = driverY + barHeight + 4 - panel->window.rectClient.y;
-		}
+		panel->window.rectClient.h = driverY + barHeight + 4 - panel->window.rectClient.y;
 	}
 	if ( outcast )
 	{
@@ -7125,13 +7146,13 @@ static void Menu_AddGameSettingsPage( menuDef_t *menu )
 			*script = String_Alloc( va( "%s%s", *script, hidePage ) );
 	}
 
-	// The page: the rows where the Game Options page has its rows, from its first row's place down to the
-	// description (Jedi Outcast's closer together than on its other pages, as on More Video), its highlight bar a copy
-	// of the one of that row, put where the row under the mouse is, headings in the colour of the menu's title (or of
-	// the page buttons, where that is the rows' colour)
+	// The page: the rows where the Game Options page has its rows, from its first row's place down to the bottom of
+	// the panel, above the description and the bottom buttons (Jedi Outcast's closer together than on its other pages,
+	// as on More Video), its highlight bar a copy of the one of that row, put where the row under the mouse is,
+	// headings in the colour of the menu's title (or of the page buttons, where that is the rows' colour)
 	const float x = model->window.rectClient.x, w = model->window.rectClient.w, firstY = model->window.rectClient.y;
 	const float pitch = outcast ? 16.0f : model->window.rectClient.h;
-	const float bottom = Q_min( panel->window.rectClient.y + panel->window.rectClient.h, (float)menu->descY - 4.0f );
+	const float bottom = Q_min( panel->window.rectClient.y + panel->window.rectClient.h, RowScroll_Bottom( menu, panel, firstY, x, x + w ) );
 	vec4_t headingColor;
 	const itemDef_t *title = Menu_FindItemByName( menu, "setup_title" );
 	memcpy( headingColor, ( title && memcmp( title->window.foreColor, model->window.foreColor, sizeof( vec4_t ) ) ) ? title->window.foreColor : unselected, sizeof( vec4_t ) );
