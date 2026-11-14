@@ -247,8 +247,9 @@ void			trap_S_StartLocalSound( sfxHandle_t sfx, int channelNum );
 void _UI_Refresh( int realtime );
 
 #ifndef JK2_MODE
-// Jedi Outcast's campaign (ui_main.cpp): replaces character creation with the start of the game.
-qboolean UI_OutcastCampaign_OpenMenu( const char *menuName );
+// Jedi Outcast's campaign (ui_main.cpp): New Game's choice of story first, and in Jedi Outcast's story the start of the
+// game instead of character creation. opener: the menu whose script opens the menu (NULL if not known).
+qboolean UI_OutcastCampaign_OpenMenu( const char *menuName, const menuDef_t *opener );
 #endif
 
 #define MAX_FONTS 64

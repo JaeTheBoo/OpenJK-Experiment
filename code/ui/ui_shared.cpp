@@ -2808,8 +2808,8 @@ qboolean Script_Open(itemDef_t *item, const char **args)
 	if (String_Parse(args, &name))
 	{
 #ifndef JK2_MODE
-		if ( UI_OutcastCampaign_OpenMenu( name ) )
-		{//Jedi Outcast's campaign has no character to create
+		if ( UI_OutcastCampaign_OpenMenu( name, item ? (const menuDef_t *)item->parent : NULL ) )
+		{//replaced: by New Game's choice of story, or by the start of Jedi Outcast's campaign (no character to create)
 			return qfalse;	// the menus are closed, run no more of this script
 		}
 #endif

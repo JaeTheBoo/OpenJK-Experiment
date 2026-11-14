@@ -1019,18 +1019,36 @@ static void UI_StartOutcastCampaign( void )
 	ui.Cmd_ExecuteText( EXEC_APPEND, "map kejim_post\n" );
 }
 
+// Whether a menu being opened (by a script of the menu opener) starts a New Game, at its choice of difficulty:
+//  - Jedi Outcast's menus have one such menu, newgameMenu, which all their New Game buttons open;
+//  - Jedi Academy's have two: newgamefirstMenu, opened by the main menu's New Game, and newgameMenu (the same without
+//    its opening animation), opened by the NEW button along the top of their Load, Controls, Setup and Quit screens.
+//    Character creation's Back (and Escape) goes back to newgameMenu too, but that is no new start: the story has
+//    been chosen.
+static qboolean UI_IsNewGameStart( const char *menuName, const menuDef_t *opener )
+{
+	if ( UI_OutcastStyle() )
+	{
+		return !Q_stricmp( menuName, "newgameMenu" ) ? qtrue : qfalse;
+	}
+	if ( !Q_stricmp( menuName, "newgamefirstMenu" ) )
+	{
+		return qtrue;
+	}
+	const qboolean fromCharacter = ( opener && opener->window.name && !Q_stricmp( opener->window.name, "characterMenu" ) ) ? qtrue : qfalse;
+	return ( !Q_stricmp( menuName, "newgameMenu" ) && !fromCharacter ) ? qtrue : qfalse;
+}
+
 // Called when a menu script opens a menu. Returns qtrue if the menu was replaced:
-//  - New Game's first menu (the difficulty choice) is preceded by the choice of story, when Jedi
-//    Outcast's game data is there to offer one (newgamefirstMenu in Jedi Academy's menus, newgameMenu
-//    in Jedi Outcast's: the one their main menu opens);
+//  - every start of a New Game (UI_IsNewGameStart) is preceded by the choice of story, when Jedi Outcast's game
+//    data is there to offer one; the choice then opens the difficulty menu itself (UI_ChooseCampaign);
 //  - in Jedi Outcast's story, the character creation that follows the difficulty choice starts the
 //    game instead.
-qboolean UI_OutcastCampaign_OpenMenu( const char *menuName )
+qboolean UI_OutcastCampaign_OpenMenu( const char *menuName, const menuDef_t *opener )
 {
 	const char *choiceMenu = UI_OutcastStyle() ? OUTCAST_STYLE_CAMPAIGN_MENU : OUTCAST_CAMPAIGN_MENU;
-	const char *newGameMenu = UI_OutcastStyle() ? "newgameMenu" : "newgamefirstMenu";
 	menuDef_t *choice = UI_OutcastDataAvailable() ? Menus_FindByName( choiceMenu ) : NULL;
-	if ( !Q_stricmp( menuName, newGameMenu ) && choice )
+	if ( choice && UI_IsNewGameStart( menuName, opener ) )
 	{
 		Menus_CloseAll();
 		// (the arrow keys go on from the first story, which its onOpen gives the focus, not from the button
